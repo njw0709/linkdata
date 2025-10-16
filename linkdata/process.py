@@ -1,8 +1,213 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import pandas as pd
 from .hrs import HRSInterviewData, HRSContextLinker
 from .daily_measure import DailyMeasureDataDir
+
+
+def compute_required_years(
+    hrs_data: HRSInterviewData,
+    max_lag_days: int,
+    date_col: Optional[str] = None,
+) -> List[int]:
+    """
+    Compute which years of contextual data are needed based on:
+    - Interview dates in HRS data
+    - Maximum lag period
+
+    This helps optimize data loading by only loading years that are actually
+    needed for the linkage, avoiding loading unnecessary years.
+
+    Parameters
+    ----------
+    hrs_data : HRSInterviewData
+        HRS interview or epigenetic data object containing date information.
+    max_lag_days : int
+        Maximum lag period in days to consider. For example, if processing
+        lags from 0 to 180 days, pass 180.
+    date_col : str, optional
+        Name of the date column to use. If None, uses hrs_data.datecol.
+
+    Returns
+    -------
+    List[int]
+        List of years needed for data linkage, sorted in ascending order.
+
+    Examples
+    --------
+    >>> # Survey data from 2016-2020, processing up to 180-day lags
+    >>> required_years = compute_required_years(hrs_data, max_lag_days=180)
+    >>> # Returns [2015, 2016, 2017, 2018, 2019, 2020]
+    >>> # (includes 2015 for 180-day lags from early 2016 dates)
+    """
+    if date_col is None:
+        date_col = hrs_data.datecol
+
+    dates = hrs_data.df[date_col]
+    min_date = dates.min() - pd.Timedelta(days=max_lag_days)
+    max_date = dates.max()
+
+    return list(range(min_date.year, max_date.year + 1))
+
+
+def extract_unique_geoids(
+    hrs_data_with_lags: pd.DataFrame,
+    geoid_prefix: str = "LINKCEN",
+) -> set:
+    """
+    Extract all unique GEOIDs from n-day-prior GEOID columns in the DataFrame.
+
+    This function identifies all GEOID columns (those containing the geoid_prefix)
+    and collects unique values across all of them. This is useful for filtering
+    contextual data to only include GEOIDs that are actually needed.
+
+    Parameters
+    ----------
+    hrs_data_with_lags : pd.DataFrame
+        DataFrame containing GEOID columns (typically output from
+        HRSContextLinker.prepare_lag_columns_batch).
+    geoid_prefix : str, default "LINKCEN"
+        Prefix used to identify GEOID columns.
+
+    Returns
+    -------
+    set
+        Set of unique GEOID strings needed for contextual data loading.
+
+    Examples
+    --------
+    >>> hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
+    ...     hrs_data, n_days=[0, 7, 30]
+    ... )
+    >>> unique_geoids = extract_unique_geoids(hrs_with_lags)
+    >>> print(f"Need data for {len(unique_geoids)} unique GEOIDs")
+    """
+    geoid_cols = [c for c in hrs_data_with_lags.columns if geoid_prefix in c]
+    all_geoids = set()
+
+    for col in geoid_cols:
+        geoids = hrs_data_with_lags[col].dropna().unique()
+        all_geoids.update(geoids)
+
+    return all_geoids
+
+
+def process_multiple_lags_batch(
+    hrs_data: HRSInterviewData,
+    contextual_dir: DailyMeasureDataDir,
+    n_days: List[int],
+    id_col: str,
+    temp_dir: Path,
+    prefix: str = "",
+    geoid_prefix: str = "LINKCEN",
+    include_lag_date: bool = False,
+    file_format: str = "parquet",
+) -> List[Path]:
+    """
+    Process multiple lags with batch optimization using pre-computed columns and filtering.
+
+    Workflow:
+    1. Pre-compute all date/GEOID columns for all lags
+    2. Keep in memory (faster than temp files for typical dataset sizes)
+    3. Extract unique GEOIDs from all lag columns
+    4. Load filtered contextual data once
+    5. For each lag, merge pre-computed columns with contextual data
+    6. Save each lag result to temp file
+
+    Parameters
+    ----------
+    hrs_data : HRSInterviewData
+        HRS interview or epigenetic data object
+    contextual_dir : DailyMeasureDataDir
+        Directory containing contextual daily measure data
+    n_days : List[int]
+        List of lag periods (in days) to process
+    id_col : str
+        Unique identifier column for joining (e.g., "hhidpn")
+    temp_dir : Path
+        Directory to save temporary lag files
+    prefix : str, optional
+        Prefix for output filenames
+    geoid_prefix : str, default "LINKCEN"
+        Prefix for GEOID column names
+    include_lag_date : bool, default False
+        Whether to include lag date columns in output
+    file_format : {"parquet", "feather", "csv"}, default "parquet"
+        File format for temporary output files
+
+    Returns
+    -------
+    List[Path]
+        List of paths to temporary files created for each lag
+    """
+    from .hrs import HRSContextLinker
+
+    print(f"\n🔄 Starting batch processing for {len(n_days)} lags...")
+
+    # Step 1: Pre-compute all lag columns
+    print(f"📋 Pre-computing date/GEOID columns for lags: {n_days}")
+    hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
+        hrs_data, n_days, geoid_prefix
+    )
+
+    # Step 2: Extract unique GEOIDs
+    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_prefix)
+    print(f"🔍 Extracted {len(unique_geoids)} unique GEOIDs from all lag columns")
+
+    # Step 3: Compute required years and load filtered contextual data
+    max_lag = max(n_days)
+    required_years = compute_required_years(hrs_data, max_lag)
+    available_years = set(contextual_dir.list_years())
+    years_to_load = [str(y) for y in required_years if str(y) in available_years]
+    print(f"📅 Loading years: {years_to_load}")
+
+    # Set filter and preload
+    contextual_dir.geoid_filter = unique_geoids
+    contextual_dir.preload_years(years_to_load)
+
+    # Concatenate all years
+    print(f"🔗 Concatenating filtered contextual data...")
+    contextual_df = pd.concat([contextual_dir[yr].df for yr in years_to_load], axis=0)
+    print(f"  Contextual data shape: {contextual_df.shape}")
+
+    # Step 4: Process each lag using pre-computed data
+    temp_files = []
+    for n in n_days:
+        print(f"  Processing lag {n}...")
+
+        out_df = HRSContextLinker.output_merged_columns(
+            hrs_data,
+            contextual_dir,
+            n=n,
+            id_col=id_col,
+            precomputed_lag_df=hrs_with_lags,
+            preloaded_contextual_df=contextual_df,
+            include_lag_date=include_lag_date,
+            geoid_prefix=geoid_prefix,
+        )
+
+        # Skip if no valid data
+        if out_df.shape[1] <= 1:
+            continue
+
+        # Save to temp file
+        filename = f"{prefix}_lag_{n:04d}.{file_format}"
+        temp_file = temp_dir / filename
+
+        if file_format == "parquet":
+            out_df.to_parquet(temp_file, index=False)
+        elif file_format == "feather":
+            out_df.reset_index(drop=True).to_feather(temp_file)
+        elif file_format == "csv":
+            out_df.to_csv(temp_file, index=False)
+        else:
+            raise ValueError(f"Unsupported file format: {file_format}")
+
+        temp_files.append(temp_file)
+        print(f"    ✓ Saved to {temp_file.name}")
+
+    print(f"✅ Batch processing complete! Generated {len(temp_files)} files\n")
+    return temp_files
 
 
 def process_single_lag(
@@ -14,10 +219,14 @@ def process_single_lag(
     prefix: str = "",
     include_lag_date: bool = False,
     file_format: str = "parquet",
+    geoid_prefix: str = "LINKCEN",
 ) -> Optional[Path]:
     """
     Process a single lag n for a given contextual dataset, merge with HRS data,
     and write the resulting lagged column to a temporary file.
+
+    NOTE: For processing multiple lags, use process_multiple_lags_batch instead,
+    which is much more efficient.
 
     Parameters
     ----------
@@ -37,6 +246,8 @@ def process_single_lag(
         Whether to include the lagged date column in the output.
     file_format : {"parquet", "feather", "csv"}, default "parquet"
         File format for the temporary output file.
+    geoid_prefix : str, default "LINKCEN"
+        Prefix for GEOID column names.
 
     Returns
     -------
@@ -45,31 +256,20 @@ def process_single_lag(
         (e.g., if all geoid values were NA for this lag).
     """
     try:
-        out_df = HRSContextLinker.output_merged_columns(
-            hrs_data,
-            contextual_dir,
-            n=n,
+        # Use batch processing internally for a single lag (gets automatic filtering)
+        temp_files = process_multiple_lags_batch(
+            hrs_data=hrs_data,
+            contextual_dir=contextual_dir,
+            n_days=[n],
             id_col=id_col,
+            temp_dir=temp_dir,
+            prefix=prefix,
+            geoid_prefix=geoid_prefix,
             include_lag_date=include_lag_date,
+            file_format=file_format,
         )
 
-        # If only ID column (no valid merged values), skip
-        if out_df.shape[1] <= 1:
-            return None
-
-        filename = f"{prefix}_lag_{n:04d}.{file_format}"
-        temp_file = temp_dir / filename
-
-        if file_format == "parquet":
-            out_df.to_parquet(temp_file, index=False)
-        elif file_format == "feather":
-            out_df.reset_index(drop=True).to_feather(temp_file)
-        elif file_format == "csv":
-            out_df.to_csv(temp_file, index=False)
-        else:
-            raise ValueError(f"Unsupported file format: {file_format}")
-
-        return temp_file
+        return temp_files[0] if temp_files else None
 
     except Exception as e:
         print(f"❌ Error processing lag {n} ({prefix}): {e}")

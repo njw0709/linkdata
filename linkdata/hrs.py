@@ -182,6 +182,56 @@ class HRSContextLinker:
         return colname
 
     # ------------------------------------------------------------------
+    # 1b. Batch column preparation
+    # ------------------------------------------------------------------
+    @staticmethod
+    def prepare_lag_columns_batch(
+        hrs_data: "HRSInterviewData",
+        n_days: List[int],
+        geoid_prefix: str = "LINKCEN",
+    ) -> pd.DataFrame:
+        """
+        Pre-create all n-day-prior date and GEOID columns for multiple lags.
+        Returns DataFrame with ID, original date, and all lag date/GEOID columns.
+
+        This is more efficient than creating columns one at a time because:
+        - All date columns are vectorized operations on the same base date
+        - All GEOID lookups happen in a single pass
+        - Results can be reused for multiple merges
+
+        Parameters
+        ----------
+        hrs_data : HRSInterviewData
+            HRS interview or epigenetic data object
+        n_days : List[int]
+            List of lag periods (in days) to create columns for
+        geoid_prefix : str, default "LINKCEN"
+            Prefix for GEOID column names
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with all original columns plus date/GEOID columns for each lag
+        """
+        # Start with copy of HRS data
+        result_df = hrs_data.df.copy()
+
+        # Create date and GEOID columns for each lag
+        for n in n_days:
+            # Date column
+            date_colname = f"{hrs_data.datecol}_{n}day_prior"
+            result_df[date_colname] = result_df[hrs_data.datecol] - pd.to_timedelta(
+                n, unit="d"
+            )
+
+            # GEOID column using existing helper
+            _ = HRSContextLinker.make_geoid_day_prior(
+                hrs_data, date_colname, geoid_prefix=geoid_prefix, df=result_df
+            )
+
+        return result_df
+
+    # ------------------------------------------------------------------
     # 2. Geoid assignment for lag date
     # ------------------------------------------------------------------
     @staticmethod
@@ -271,28 +321,49 @@ class HRSContextLinker:
         contextual_dir: DailyMeasureDataDir,
         n: int,
         id_col: str,
+        precomputed_lag_df: pd.DataFrame,
+        preloaded_contextual_df: pd.DataFrame,
         include_lag_date: bool = False,
+        geoid_prefix: str = "LINKCEN",
     ) -> pd.DataFrame:
         """
-        For a specific lag `n`, compute the n-day prior and geoid columns,
-        merge with contextual data, and return only the merged contextual
-        column plus ID (and optionally the lag date column).
-        This method does not modify hrs_data.df, making it suitable for
-        parallelized linkage workflows.
+        For a specific lag n, merge pre-computed lag columns with pre-loaded contextual data.
+
+        This method expects pre-computed date/GEOID columns and pre-loaded contextual data
+        for efficiency. Use with process_multiple_lags_batch for best performance.
+
+        Parameters
+        ----------
+        hrs_data : HRSInterviewData
+            HRS interview or epigenetic data object (used for metadata like datecol)
+        contextual_dir : DailyMeasureDataDir
+            Directory containing contextual daily measure data (used for metadata)
+        n : int
+            Lag period in days
+        id_col : str
+            Unique identifier column for joining (e.g., "hhidpn")
+        precomputed_lag_df : pd.DataFrame
+            Pre-computed DataFrame with date and GEOID columns for all lags.
+            Should contain: id_col, {datecol}_{n}day_prior, {geoid_prefix}_{n}day_prior
+        preloaded_contextual_df : pd.DataFrame
+            Pre-loaded and filtered contextual data (already concatenated across years)
+        include_lag_date : bool, default False
+            Whether to include the lagged date column in the output
+        geoid_prefix : str, default "LINKCEN"
+            Prefix for GEOID column names
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with ID, optionally lag date, and merged contextual column
         """
-        # Shallow copy of relevant columns
-        hrs_copy = hrs_data.df[[id_col, hrs_data.datecol]].copy()
-
-        # n-day prior date column
+        # Extract pre-computed lag columns
         n_day_colname = f"{hrs_data.datecol}_{n}day_prior"
-        hrs_copy[n_day_colname] = hrs_copy[hrs_data.datecol] - pd.to_timedelta(
-            n, unit="d"
-        )
+        n_day_geoid_colname = f"{geoid_prefix}_{n}day_prior"
 
-        # Geoid column using helper
-        n_day_geoid_colname = HRSContextLinker.make_geoid_day_prior(
-            hrs_data, n_day_colname, df=hrs_copy
-        )
+        hrs_copy = precomputed_lag_df[
+            [id_col, n_day_colname, n_day_geoid_colname]
+        ].copy()
 
         # If no valid geoid, return empty contextual column
         if hrs_copy[n_day_geoid_colname].isna().all():
@@ -301,12 +372,14 @@ class HRSContextLinker:
                 out_cols.append(n_day_colname)
             return hrs_copy[out_cols]
 
-        # Merge with contextual data
-        years = contextual_dir.list_years()
-        contextual_df = pd.concat([contextual_dir[yr].df for yr in years], axis=0)
-        first_context = contextual_dir[years[0]]
+        # Use pre-loaded contextual data
+        contextual_df = preloaded_contextual_df
+        # Get metadata from contextual_dir
+        first_year = contextual_dir.list_years()[0]
+        first_context = contextual_dir[first_year]
         right_on = [first_context.date_col, first_context.geoid_col]
 
+        # Merge
         merged = pd.merge(
             hrs_copy,
             contextual_df,

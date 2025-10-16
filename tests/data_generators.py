@@ -7,6 +7,7 @@ importing pandas, to avoid NumPy compatibility issues.
 
 import numpy as np
 from typing import List
+from pathlib import Path
 
 
 def generate_fake_hhidpn(n_people: int) -> List[int]:
@@ -15,8 +16,61 @@ def generate_fake_hhidpn(n_people: int) -> List[int]:
     return list(range(10000001, 10000001 + n_people))
 
 
-def generate_fake_geoid() -> str:
-    """Generate a realistic 11-digit Census tract GEOID."""
+def get_real_geoids_sample(heat_index_dir: Path, sample_size: int = 500) -> List[str]:
+    """
+    Extract a sample of real GEOIDs from heat index CSV files.
+    Reads first file to get actual GEOIDs used in the dataset.
+
+    Parameters
+    ----------
+    heat_index_dir : Path
+        Directory containing heat index CSV files
+    sample_size : int
+        Number of GEOIDs to sample (default 500)
+
+    Returns
+    -------
+    List[str]
+        List of real GEOID strings
+    """
+    import pandas as pd
+
+    # Read first available CSV file
+    csv_files = sorted(heat_index_dir.glob("*.csv"))
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found in {heat_index_dir}")
+
+    print(f"  Extracting real GEOIDs from {csv_files[0].name}...")
+    # Read small sample to get GEOIDs
+    df_sample = pd.read_csv(csv_files[0], nrows=100000)
+
+    if "GEOID10" in df_sample.columns:
+        geoid_col = "GEOID10"
+    elif "GEOID" in df_sample.columns:
+        geoid_col = "GEOID"
+    else:
+        raise ValueError(f"No GEOID column found in {csv_files[0]}")
+
+    # Get unique GEOIDs and sample
+    unique_geoids = df_sample[geoid_col].astype(str).str.zfill(11).unique()
+    sampled = np.random.choice(
+        unique_geoids, size=min(sample_size, len(unique_geoids)), replace=False
+    )
+
+    print(f"  Sampled {len(sampled)} GEOIDs from {len(unique_geoids)} unique values")
+    return sampled.tolist()
+
+
+def generate_fake_geoid(geoid_pool: List[str] = None) -> str:
+    """
+    Generate a realistic 11-digit Census tract GEOID.
+
+    If geoid_pool is provided, randomly selects from it.
+    Otherwise generates a random GEOID.
+    """
+    if geoid_pool is not None and len(geoid_pool) > 0:
+        return np.random.choice(geoid_pool)
+
     # Format: SSCCCTTTTTT (State-County-Census Tract)
     state = np.random.randint(1, 57)  # 50 states + DC + territories
     county = np.random.randint(1, 1000)
@@ -25,7 +79,9 @@ def generate_fake_geoid() -> str:
     return f"{state:02d}{county:03d}{tract:06d}"
 
 
-def create_residential_history_data(n_people: int = 55) -> List[dict]:
+def create_residential_history_data(
+    n_people: int = 55, geoid_pool: List[str] = None
+) -> List[dict]:
     """
     Create fake residential history data with varied move patterns.
 
@@ -33,6 +89,8 @@ def create_residential_history_data(n_people: int = 55) -> List[dict]:
     ----------
     n_people : int
         Number of people to generate (default 55)
+    geoid_pool : List[str], optional
+        Pool of real GEOIDs to sample from. If None, generates random GEOIDs.
 
     Returns
     -------
@@ -52,7 +110,7 @@ def create_residential_history_data(n_people: int = 55) -> List[dict]:
             n_moves = np.random.randint(2, 5)
 
         # First tract (survey year 2010)
-        first_geoid = generate_fake_geoid()
+        first_geoid = generate_fake_geoid(geoid_pool)
         rows.append(
             {
                 "hhidpn": hhidpn,
@@ -70,7 +128,7 @@ def create_residential_history_data(n_people: int = 55) -> List[dict]:
             # Move year: 2011-2019, ensuring chronological order
             move_year = np.random.randint(current_year + 1, min(current_year + 3, 2020))
             move_month = np.random.randint(1, 13)
-            move_geoid = generate_fake_geoid()
+            move_geoid = generate_fake_geoid(geoid_pool)
 
             rows.append(
                 {
@@ -88,7 +146,7 @@ def create_residential_history_data(n_people: int = 55) -> List[dict]:
     return rows
 
 
-def create_survey_data(n_people: int = 55) -> List[dict]:
+def create_survey_data(n_people: int = 55, geoid_pool: List[str] = None) -> List[dict]:
     """
     Create fake survey/interview data matching the residential history IDs.
 
@@ -96,6 +154,8 @@ def create_survey_data(n_people: int = 55) -> List[dict]:
     ----------
     n_people : int
         Number of people to generate (default 55)
+    geoid_pool : List[str], optional
+        Pool of real GEOIDs to sample from. If None, generates random GEOIDs.
 
     Returns
     -------
@@ -114,9 +174,9 @@ def create_survey_data(n_people: int = 55) -> List[dict]:
         bcdate = f"{interview_year}-{interview_month:02d}-{interview_day:02d}"
 
         # Create static GEOID columns for different years (2010, 2015, 2020)
-        geoid_2010 = generate_fake_geoid()
-        geoid_2015 = generate_fake_geoid()
-        geoid_2020 = generate_fake_geoid()
+        geoid_2010 = generate_fake_geoid(geoid_pool)
+        geoid_2015 = generate_fake_geoid(geoid_pool)
+        geoid_2020 = generate_fake_geoid(geoid_pool)
 
         rows.append(
             {

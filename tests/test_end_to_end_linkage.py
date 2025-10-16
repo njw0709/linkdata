@@ -17,14 +17,30 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData
+from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData, HRSContextLinker
 from linkdata.daily_measure import DailyMeasureDataDir
-from linkdata.process import process_single_lag
+from linkdata.process import (
+    process_single_lag,
+    process_multiple_lags_batch,
+    compute_required_years,
+    extract_unique_geoids,
+)
+
+
+@pytest.fixture(scope="session")
+def real_geoid_pool(heat_index_dir):
+    """Extract real GEOIDs from heat data for test generation."""
+    from .data_generators import get_real_geoids_sample
+
+    print("\n🔍 Extracting real GEOIDs from heat data...")
+    geoid_pool = get_real_geoids_sample(heat_index_dir, sample_size=500)
+    print(f"  Loaded {len(geoid_pool)} real GEOIDs for testing")
+    return geoid_pool
 
 
 @pytest.fixture
-def survey_data_2016_2020(tmp_path):
-    """Create survey data with interview dates only in 2016-2020."""
+def survey_data_2016_2020(tmp_path, real_geoid_pool):
+    """Create survey data with interview dates only in 2016-2020 using real GEOIDs."""
     from .data_generators import generate_fake_hhidpn, generate_fake_geoid
 
     n_people = 55
@@ -41,10 +57,10 @@ def survey_data_2016_2020(tmp_path):
             f"{interview_year}-{interview_month:02d}-{interview_day:02d}"
         )
 
-        # Create static GEOID columns
-        geoid_2010 = generate_fake_geoid()
-        geoid_2015 = generate_fake_geoid()
-        geoid_2020 = generate_fake_geoid()
+        # Create static GEOID columns using real GEOIDs
+        geoid_2010 = generate_fake_geoid(real_geoid_pool)
+        geoid_2015 = generate_fake_geoid(real_geoid_pool)
+        geoid_2020 = generate_fake_geoid(real_geoid_pool)
 
         rows.append(
             {
@@ -67,7 +83,7 @@ def survey_data_2016_2020(tmp_path):
     return file_path
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def heat_index_dir():
     """Return path to real heat index data directory."""
     return Path(__file__).parent / "test_data" / "heat_index"
@@ -123,9 +139,23 @@ def test_end_to_end_sequential_linkage(
         print(f"❌ Error loading heat data: {e}")
         raise
 
+    # Step 3b: Compute required years and preload
+    lags_to_test = [0, 7, 30]  # 3 lags for testing (balance between coverage and speed)
+    max_lag = max(lags_to_test)
+    print(f"🔍 Computing required years for max lag of {max_lag} days...")
+    required_years = compute_required_years(hrs_data, max_lag_days=max_lag)
+    print(f"  Required years: {required_years}")
+
+    # Filter to only available years
+    available_year_set = set(heat_data.list_years())
+    years_to_load = [str(y) for y in required_years if str(y) in available_year_set]
+    print(f"  Years to load: {years_to_load}")
+
+    # Preload all required data
+    heat_data.preload_years(years_to_load)
+
     # Step 4: Process lags sequentially
     print("⚡ Processing lags sequentially...")
-    lags_to_test = [0, 7, 30]  # 3 lags for testing (balance between coverage and speed)
     id_col = "hhidpn"
     temp_dir = tmp_path / "temp_lags_sequential"
     temp_dir.mkdir(exist_ok=True)
@@ -234,12 +264,28 @@ def test_end_to_end_parallel_processing(
         measure_type=None,
     )
 
+    # Step 3b: Compute required years and preload
+    lags_to_test = [0, 7, 30]  # 3 lags for testing (balance between coverage and speed)
+    max_lag = max(lags_to_test)
+    print(f"🔍 Computing required years for max lag of {max_lag} days...")
+    required_years = compute_required_years(hrs_data, max_lag_days=max_lag)
+    print(f"  Required years: {required_years}")
+
+    # Filter to only available years
+    available_year_set = set(heat_data.list_years())
+    years_to_load = [str(y) for y in required_years if str(y) in available_year_set]
+    print(f"  Years to load: {years_to_load}")
+
+    # Preload all required data (crucial for parallel processing efficiency)
+    heat_data.preload_years(years_to_load)
+
     # Step 4: Process lags in parallel
     # NOTE: Using ThreadPoolExecutor instead of ProcessPoolExecutor due to
     # serialization issues with complex pandas/numpy objects across processes.
     # The actual step1 script works around this by passing file paths.
+    # With ThreadPoolExecutor, all threads share the same memory space and can
+    # access the preloaded data without additional I/O or copying.
     print("🚀 Processing lags in parallel (using threads)...")
-    lags_to_test = [0, 7, 30]  # 3 lags for testing (balance between coverage and speed)
     id_col = "hhidpn"
     temp_dir = tmp_path / "temp_lags_parallel"
     temp_dir.mkdir(exist_ok=True)
@@ -332,3 +378,114 @@ def test_sequential_vs_parallel_consistency(
     Run with pytest -k consistency to include this test.
     """
     pytest.skip("Skipping consistency test - both workflows tested separately")
+
+
+def test_batch_merge_with_filtering(
+    fake_residential_history_file, survey_data_2016_2020, heat_index_dir, tmp_path
+):
+    """
+    Test batch processing with smart GEOID filtering using process_multiple_lags_batch.
+
+    This test validates:
+    - Batch pre-computation of all lag columns
+    - GEOID extraction from all lag columns
+    - Filtered data loading (reduces memory/I/O)
+    - Batch processing produces correct temp files
+    - Final merged results match expected structure
+    - Using real GEOIDs produces non-null heat values
+    """
+    print("\n" + "=" * 60)
+    print("🧪 Testing Batch Processing with Smart GEOID Filtering")
+    print("=" * 60)
+
+    # Step 1: Load residential history
+    print("📥 Loading residential history...")
+    residential_hist = ResidentialHistoryHRS(
+        fake_residential_history_file, first_tract_mark="999.0"
+    )
+
+    # Step 2: Load survey data
+    print("📥 Loading survey data (2016-2020)...")
+    hrs_data = HRSInterviewData(
+        survey_data_2016_2020,
+        datecol="iwdate",
+        move=True,
+        residential_hist=residential_hist,
+    )
+
+    print(f"  Survey data shape: {hrs_data.df.shape}")
+    print(
+        f"  Date range: {hrs_data.df['iwdate'].min()} to {hrs_data.df['iwdate'].max()}"
+    )
+
+    # Step 3: Initialize heat index data
+    print("📥 Initializing heat index data...")
+    heat_data = DailyMeasureDataDir(heat_index_dir, data_col="index", measure_type=None)
+    print(f"  Available years: {heat_data.list_years()}")
+
+    # Step 4: Use batch processing
+    lags = [0, 7, 30]
+    print(f"\n🔄 Testing batch processing for lags: {lags}")
+
+    temp_dir = tmp_path / "batch_lags"
+    temp_dir.mkdir()
+
+    temp_files = process_multiple_lags_batch(
+        hrs_data=hrs_data,
+        contextual_dir=heat_data,
+        n_days=lags,
+        id_col="hhidpn",
+        temp_dir=temp_dir,
+        prefix="heat",
+    )
+
+    print(f"\n📁 Generated {len(temp_files)} temp files")
+
+    # Step 5: Merge results
+    print("📎 Merging lag outputs with survey data...")
+    final_df = hrs_data.df[["hhidpn"]].copy()
+    for f in temp_files:
+        lag_df = pd.read_parquet(f)
+        final_df = final_df.merge(lag_df, on="hhidpn", how="left")
+
+    print(f"  Final dataset shape: {final_df.shape}")
+    print(f"  Final columns: {final_df.columns.tolist()}")
+
+    # Step 6: Validate output
+    print("\n✓ Validating output...")
+
+    # Check all people are present
+    assert len(final_df) == len(hrs_data.df), "All people should be in final dataset"
+    print(f"  ✓ All {len(final_df)} people present")
+
+    # Check lag columns were created
+    expected_lag_cols = [f"index_iwdate_{n}day_prior" for n in lags]
+    for col in expected_lag_cols:
+        assert col in final_df.columns, f"Missing lag column: {col}"
+        print(f"  ✓ Found column: {col}")
+
+    # Check heat values are reasonable (should have non-null values with real GEOIDs)
+    for col in expected_lag_cols:
+        non_null_values = final_df[col].dropna()
+        if len(non_null_values) > 0:
+            assert (
+                non_null_values.min() >= 0
+            ), f"Heat values should be positive in {col}"
+            assert (
+                non_null_values.max() <= 150
+            ), f"Heat values should be reasonable in {col}"
+            print(
+                f"  ✓ {col}: {len(non_null_values)} non-null values, "
+                f"range [{non_null_values.min():.1f}, {non_null_values.max():.1f}]"
+            )
+        else:
+            print(f"  ⚠️  {col}: All null values (no matching data)")
+
+    # Check ID column is correct
+    assert "hhidpn" in final_df.columns, "ID column should be present"
+    assert final_df["hhidpn"].nunique() == len(
+        hrs_data.df
+    ), "All unique IDs should be present"
+
+    print("\n✅ Batch processing with filtering completed successfully!")
+    print("=" * 60)

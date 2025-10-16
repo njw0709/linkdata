@@ -12,7 +12,7 @@ from linkdata.hrs import ResidentialHistoryHRS
 from .data_generators import create_residential_history_data
 
 
-def create_residential_history_dataframe(n_people: int = 55):
+def create_residential_history_dataframe(n_people: int = 55, geoid_pool: list = None):
     """
     Create fake residential history data with varied move patterns.
 
@@ -20,6 +20,8 @@ def create_residential_history_dataframe(n_people: int = 55):
     ----------
     n_people : int
         Number of people to generate (default 55)
+    geoid_pool : list, optional
+        Pool of real GEOIDs to sample from
 
     Returns
     -------
@@ -29,7 +31,7 @@ def create_residential_history_dataframe(n_people: int = 55):
     import pandas as pd
 
     # Get data from standalone generator
-    data_rows = create_residential_history_data(n_people)
+    data_rows = create_residential_history_data(n_people, geoid_pool=geoid_pool)
 
     # Convert to DataFrame
     df = pd.DataFrame(data_rows)
@@ -46,16 +48,16 @@ def create_residential_history_dataframe(n_people: int = 55):
 
 
 @pytest.fixture
-def fake_residential_history_file(tmp_path):
+def fake_residential_history_file(tmp_path, real_geoid_pool):
     """
-    Create a fake residential history Stata file and return its path.
+    Create a fake residential history Stata file using real GEOIDs and return its path.
 
     Returns
     -------
     Path
         Path to the generated .dta file
     """
-    df = create_residential_history_dataframe()
+    df = create_residential_history_dataframe(geoid_pool=real_geoid_pool)
     file_path = tmp_path / "fake_residential_history.dta"
     df.to_stata(file_path, write_index=False)
     return file_path

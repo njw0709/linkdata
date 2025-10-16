@@ -32,6 +32,7 @@ class DailyMeasureData:
         geoid_col: str = "GEOID10",
         date_col: str = "Date",
         rename_col: Optional[dict] = None,
+        geoid_filter: Optional[set] = None,
     ):
         """
         Initialize a DailyMeasureData object by reading and processing a single
@@ -78,6 +79,11 @@ class DailyMeasureData:
             used to handle inconsistent column names across years (e.g.,
             `{"HeatIndex_2010": "HeatIndex"}`).
 
+        geoid_filter : set, optional
+            Optional set of GEOID strings to filter the data to. If provided, only
+            rows with GEOIDs in this set will be retained. This dramatically reduces
+            memory usage when you only need data for a small subset of GEOIDs.
+
         Raises
         ------
         FileNotFoundError
@@ -115,6 +121,7 @@ class DailyMeasureData:
         self.read_dtype = read_dtype
         self.expected_format = expected_format
         self.rename_col = rename_col
+        self.geoid_filter = geoid_filter
 
         # Infer data_col from measure_type if not explicitly passed
         if data_col is None:
@@ -169,6 +176,15 @@ class DailyMeasureData:
             df[self.date_col] = pd.to_datetime(df[self.date_col], errors="coerce")
         df[self.geoid_col] = df[self.geoid_col].astype(str).str.zfill(11)
 
+        # --- 5. Filter by GEOID if provided ---
+        if self.geoid_filter is not None:
+            before_count = len(df)
+            df = df[df[self.geoid_col].isin(self.geoid_filter)]
+            after_count = len(df)
+            print(
+                f"  Filtered to {after_count:,} rows ({len(self.geoid_filter)} GEOIDs) from {before_count:,} rows"
+            )
+
         self.df = df
 
     # ------------------------------------------------------------------
@@ -208,6 +224,7 @@ class DailyMeasureDataDir:
         data_col: Optional[str] = None,
         rename_col_dict: Optional[dict] = None,
         read_dtype: str = "float32",
+        geoid_filter: Optional[set] = None,
     ):
         """
         Initialize a directory-level wrapper for daily measure CSV files spanning multiple years.
@@ -246,6 +263,11 @@ class DailyMeasureDataDir:
         read_dtype : str, default "float32"
             Data type to use for the data column when reading. Using "float32" typically
             reduces memory footprint with minimal precision loss.
+
+        geoid_filter : set, optional
+            Optional set of GEOID strings to filter the data to. If provided, this filter
+            will be passed to all DailyMeasureData objects created when accessing years.
+            This dramatically reduces memory usage when you only need data for a small subset of GEOIDs.
 
         Raises
         ------
@@ -301,6 +323,7 @@ class DailyMeasureDataDir:
         self.data_col = data_col
         self.measure_type = measure_type
         self.read_dtype = read_dtype
+        self.geoid_filter = geoid_filter
 
         # Rename dict per year (optional)
         self.rename_col_dict = rename_col_dict or {}
@@ -389,9 +412,37 @@ class DailyMeasureDataDir:
                 measure_type=self.measure_type,
                 read_dtype=self.read_dtype,
                 rename_col=rename_col,
+                geoid_filter=self.geoid_filter,
             )
 
         return self._cache[year_key]
+
+    # ------------------------------------------------------------------
+    def preload_years(self, years: Optional[List[str]] = None) -> None:
+        """
+        Preload data for specified years (or all available years).
+        Loads all data into _cache to avoid lazy loading during processing.
+
+        Parameters
+        ----------
+        years : List[str], optional
+            List of years to preload. If None, preloads all available years.
+
+        Examples
+        --------
+        >>> heat_dir.preload_years(['2016', '2017', '2018'])
+        >>> # All specified years are now cached in memory
+        """
+        if years is None:
+            years = self.years_available
+
+        print(
+            f"📥 Preloading {len(years)} years of {self.measure_type or self.data_col} data..."
+        )
+        for year in years:
+            if year not in self._cache:
+                _ = self[year]  # Triggers lazy loading and caching
+        print(f"✅ Preloaded {len(years)} years successfully")
 
     # ------------------------------------------------------------------
     def list_years(self) -> List[str]:
