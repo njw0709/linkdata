@@ -210,6 +210,123 @@ def process_multiple_lags_batch(
     return temp_files
 
 
+def process_multiple_lags_parallel(
+    hrs_data: HRSInterviewData,
+    contextual_dir: DailyMeasureDataDir,
+    n_days: List[int],
+    id_col: str,
+    temp_dir: Path,
+    prefix: str = "",
+    geoid_prefix: str = "LINKCEN",
+    include_lag_date: bool = False,
+    file_format: str = "parquet",
+    max_workers: Optional[int] = None,
+) -> List[Path]:
+    """
+    Process multiple lags with parallel processing using ThreadPoolExecutor.
+
+    Pre-computes all lag columns and filters contextual data once, then processes
+    lags in parallel threads that share the same memory space (avoiding serialization).
+
+    Parameters
+    ----------
+    hrs_data : HRSInterviewData
+        HRS interview or epigenetic data object
+    contextual_dir : DailyMeasureDataDir
+        Directory containing contextual daily measure data
+    n_days : List[int]
+        List of lag periods (in days) to process
+    id_col : str
+        Unique identifier column for joining (e.g., "hhidpn")
+    temp_dir : Path
+        Directory to save temporary lag files
+    prefix : str, optional
+        Prefix for output filenames
+    geoid_prefix : str, default "LINKCEN"
+        Prefix for GEOID column names
+    include_lag_date : bool, default False
+        Whether to include lag date columns in output
+    file_format : {"parquet", "feather", "csv"}, default "parquet"
+        File format for temporary output files
+    max_workers : int, optional
+        Maximum number of worker threads. If None, uses default from ThreadPoolExecutor.
+
+    Returns
+    -------
+    List[Path]
+        List of paths to temporary files created for each lag
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from .hrs import HRSContextLinker
+
+    print(f"\n🚀 Starting parallel processing for {len(n_days)} lags...")
+
+    # Step 1: Pre-compute all lag columns
+    print(
+        f"📋 Pre-computing date/GEOID columns for lags: {min(n_days)} to {max(n_days)}"
+    )
+    hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
+        hrs_data, n_days, geoid_prefix
+    )
+
+    # Step 2: Extract unique GEOIDs
+    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_prefix)
+    print(f"🔍 Extracted {len(unique_geoids)} unique GEOIDs from all lag columns")
+
+    # Step 3: Compute required years and load filtered contextual data
+    max_lag = max(n_days)
+    required_years = compute_required_years(hrs_data, max_lag)
+    available_years = set(contextual_dir.list_years())
+    years_to_load = [str(y) for y in required_years if str(y) in available_years]
+    print(f"📅 Loading years: {years_to_load}")
+
+    # Set filter and preload
+    contextual_dir.geoid_filter = unique_geoids
+    contextual_dir.preload_years(years_to_load)
+
+    # Concatenate all years
+    print(f"🔗 Concatenating filtered contextual data...")
+    contextual_df = pd.concat([contextual_dir[yr].df for yr in years_to_load], axis=0)
+    print(f"  Contextual data shape: {contextual_df.shape}")
+
+    # Step 4: Process lags in parallel using threads (shares memory)
+    print(f"⚡ Processing {len(n_days)} lags in parallel...")
+    temp_files = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        futures = {
+            executor.submit(
+                process_single_lag,
+                n=n,
+                hrs_data=hrs_data,
+                contextual_dir=contextual_dir,
+                id_col=id_col,
+                temp_dir=temp_dir,
+                prefix=prefix,
+                include_lag_date=include_lag_date,
+                file_format=file_format,
+                geoid_prefix=geoid_prefix,
+                precomputed_lag_df=hrs_with_lags,
+                preloaded_contextual_df=contextual_df,
+            ): n
+            for n in n_days
+        }
+
+        # Collect results as they complete
+        for fut in as_completed(futures):
+            n = futures[fut]
+            try:
+                result = fut.result()
+                if result is not None:
+                    temp_files.append(result)
+            except Exception as e:
+                print(f"  ❌ Error processing lag {n}: {e}")
+
+    print(f"✅ Parallel processing complete! Generated {len(temp_files)} files\n")
+    return temp_files
+
+
 def process_single_lag(
     n: int,
     hrs_data: HRSInterviewData,
@@ -220,13 +337,17 @@ def process_single_lag(
     include_lag_date: bool = False,
     file_format: str = "parquet",
     geoid_prefix: str = "LINKCEN",
+    precomputed_lag_df: Optional[pd.DataFrame] = None,
+    preloaded_contextual_df: Optional[pd.DataFrame] = None,
 ) -> Optional[Path]:
     """
     Process a single lag n for a given contextual dataset, merge with HRS data,
     and write the resulting lagged column to a temporary file.
 
-    NOTE: For processing multiple lags, use process_multiple_lags_batch instead,
-    which is much more efficient.
+    Can optionally accept pre-computed lag columns and pre-loaded contextual data
+    for efficiency when called from parallel processing.
+
+    NOTE: For processing multiple lags efficiently, use process_multiple_lags_batch instead.
 
     Parameters
     ----------
@@ -248,6 +369,10 @@ def process_single_lag(
         File format for the temporary output file.
     geoid_prefix : str, default "LINKCEN"
         Prefix for GEOID column names.
+    precomputed_lag_df : pd.DataFrame, optional
+        Pre-computed DataFrame with date and GEOID columns. If provided, skips computation.
+    preloaded_contextual_df : pd.DataFrame, optional
+        Pre-loaded contextual data. If provided, skips loading from contextual_dir.
 
     Returns
     -------
@@ -255,21 +380,73 @@ def process_single_lag(
         Path to the written temporary file, or None if no data was produced
         (e.g., if all geoid values were NA for this lag).
     """
-    try:
-        # Use batch processing internally for a single lag (gets automatic filtering)
-        temp_files = process_multiple_lags_batch(
-            hrs_data=hrs_data,
-            contextual_dir=contextual_dir,
-            n_days=[n],
-            id_col=id_col,
-            temp_dir=temp_dir,
-            prefix=prefix,
-            geoid_prefix=geoid_prefix,
-            include_lag_date=include_lag_date,
-            file_format=file_format,
-        )
+    from .hrs import HRSContextLinker
 
-        return temp_files[0] if temp_files else None
+    try:
+        # If pre-computed data is provided, use it directly
+        if precomputed_lag_df is not None and preloaded_contextual_df is not None:
+            out_df = HRSContextLinker.output_merged_columns(
+                hrs_data,
+                contextual_dir,
+                n=n,
+                id_col=id_col,
+                precomputed_lag_df=precomputed_lag_df,
+                preloaded_contextual_df=preloaded_contextual_df,
+                include_lag_date=include_lag_date,
+                geoid_prefix=geoid_prefix,
+            )
+        else:
+            # Compute lag columns for this single lag
+            hrs_with_lag = HRSContextLinker.prepare_lag_columns_batch(
+                hrs_data, [n], geoid_prefix
+            )
+
+            # Extract unique GEOIDs for this lag
+            unique_geoids = extract_unique_geoids(hrs_with_lag, geoid_prefix)
+
+            # Compute required years and load filtered data
+            required_years = compute_required_years(hrs_data, n)
+            available_years = set(contextual_dir.list_years())
+            years_to_load = [
+                str(y) for y in required_years if str(y) in available_years
+            ]
+
+            # Set filter and load
+            contextual_dir.geoid_filter = unique_geoids
+            contextual_dir.preload_years(years_to_load)
+            contextual_df = pd.concat(
+                [contextual_dir[yr].df for yr in years_to_load], axis=0
+            )
+
+            # Merge
+            out_df = HRSContextLinker.output_merged_columns(
+                hrs_data,
+                contextual_dir,
+                n=n,
+                id_col=id_col,
+                precomputed_lag_df=hrs_with_lag,
+                preloaded_contextual_df=contextual_df,
+                include_lag_date=include_lag_date,
+                geoid_prefix=geoid_prefix,
+            )
+
+        # If only ID column (no valid merged values), skip
+        if out_df.shape[1] <= 1:
+            return None
+
+        filename = f"{prefix}_lag_{n:04d}.{file_format}"
+        temp_file = temp_dir / filename
+
+        if file_format == "parquet":
+            out_df.to_parquet(temp_file, index=False)
+        elif file_format == "feather":
+            out_df.reset_index(drop=True).to_feather(temp_file)
+        elif file_format == "csv":
+            out_df.to_csv(temp_file, index=False)
+        else:
+            raise ValueError(f"Unsupported file format: {file_format}")
+
+        return temp_file
 
     except Exception as e:
         print(f"❌ Error processing lag {n} ({prefix}): {e}")
