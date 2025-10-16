@@ -39,7 +39,7 @@ from linkdata.process import process_single_lag
 def main(args: argparse.Namespace):
     hrs_path = Path(args.hrs_data)
     context_dir = Path(args.context_dir)
-    out_path = Path(args.output)
+    out_path = Path(args.save_dir) / Path(args.output_name)
 
     if not hrs_path.exists():
         raise FileNotFoundError(f"HRS file not found: {hrs_path}")
@@ -80,8 +80,9 @@ def main(args: argparse.Namespace):
     # -------------------------------------------------------------------
     # ⚡ Process lags (parallel or sequential)
     # -------------------------------------------------------------------
-    temp_dir = Path(tempfile.mkdtemp(prefix="hrs_lag_"))
-    print(f"⚡ Temporary files will be written to: {temp_dir}")
+    temp_dir = Path(args.save_dir) / "temp_lag_files"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    print(f"⚡ Temporary lag files will be saved to: {temp_dir}")
 
     temp_files = []
 
@@ -151,7 +152,12 @@ if __name__ == "__main__":
         required=True,
         help="Directory containing daily contextual CSV files",
     )
-    parser.add_argument("--output", required=True, help="Output .dta file path")
+    parser.add_argument(
+        "--output_name",
+        default="linked_data.dta",
+        type=str,
+        help="Output .dta file name",
+    )
     parser.add_argument(
         "--id-col",
         required=True,
@@ -165,6 +171,12 @@ if __name__ == "__main__":
         required=True,
         help="Measurement type (e.g., heat_index, pm25, ozone, other contextual data). File name must include this as substrings",
     )
+    parser.add_argument(
+        "--save-dir",
+        required=True,
+        help="Directory where output and temporary lag files will be saved",
+    )
+
     parser.add_argument(
         "--data-col",
         help="Explicit data column name to use (optional, overrides measure type)",
