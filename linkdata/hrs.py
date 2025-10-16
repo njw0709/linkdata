@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 from tqdm import tqdm
 
-from .daily_measure import DailyMeasureDataDir  # unified DailyMeasure classes
+from .daily_measure import DailyMeasureDataDir
 
 
 # ---------------------------------------------------------------------
@@ -219,7 +219,7 @@ class HRSContextLinker:
     @staticmethod
     def merge_with_contextual_data(
         hrs_data: "HRSInterviewData",
-        contextual_dir: "DailyMeasureDataDir",
+        contextual_dir: DailyMeasureDataDir,
         left_on: List[str],
         drop_left: bool = True,
     ) -> "HRSInterviewData":
@@ -268,7 +268,7 @@ class HRSContextLinker:
     @staticmethod
     def output_merged_columns(
         hrs_data: "HRSInterviewData",
-        contextual_dir: "DailyMeasureDataDir",
+        contextual_dir: DailyMeasureDataDir,
         n: int,
         id_col: str,
         include_lag_date: bool = False,

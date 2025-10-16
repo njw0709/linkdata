@@ -1,0 +1,199 @@
+"""
+Utility functions for generating fake HRS data.
+
+This module provides standalone functions for generating fake data without
+importing pandas, to avoid NumPy compatibility issues.
+"""
+
+import numpy as np
+from typing import List
+
+
+def generate_fake_hhidpn(n_people: int) -> List[int]:
+    """Generate fake HRS person IDs in realistic format."""
+    # HRS IDs are typically 8-digit numbers
+    return list(range(10000001, 10000001 + n_people))
+
+
+def generate_fake_geoid() -> str:
+    """Generate a realistic 11-digit Census tract GEOID."""
+    # Format: SSCCCTTTTTT (State-County-Census Tract)
+    state = np.random.randint(1, 57)  # 50 states + DC + territories
+    county = np.random.randint(1, 1000)
+    tract = np.random.randint(1, 10000)
+
+    return f"{state:02d}{county:03d}{tract:06d}"
+
+
+def create_residential_history_data(n_people: int = 55) -> List[dict]:
+    """
+    Create fake residential history data with varied move patterns.
+
+    Parameters
+    ----------
+    n_people : int
+        Number of people to generate (default 55)
+
+    Returns
+    -------
+    List[dict]
+        List of dictionaries representing residential history rows
+    """
+    hhidpns = generate_fake_hhidpn(n_people)
+    rows = []
+
+    for i, hhidpn in enumerate(hhidpns):
+        # Determine move pattern for this person
+        if i < 20:  # ~20 people with no moves
+            n_moves = 0
+        elif i < 40:  # ~20 people with 1 move
+            n_moves = 1
+        else:  # ~15 people with 2-4 moves
+            n_moves = np.random.randint(2, 5)
+
+        # First tract (survey year 2010)
+        first_geoid = generate_fake_geoid()
+        rows.append(
+            {
+                "hhidpn": hhidpn,
+                "trmove_tr": "999.0",  # First tract marker as string
+                "mvyear": np.nan,  # No move year for first tract
+                "mvmonth": np.nan,  # No move month for first tract
+                "LINKCEN2010": first_geoid,
+                "year": 2010,
+            }
+        )
+
+        # Add moves if any
+        current_year = 2010
+        for move_num in range(n_moves):
+            # Move year: 2011-2019, ensuring chronological order
+            move_year = np.random.randint(current_year + 1, min(current_year + 3, 2020))
+            move_month = np.random.randint(1, 13)
+            move_geoid = generate_fake_geoid()
+
+            rows.append(
+                {
+                    "hhidpn": hhidpn,
+                    "trmove_tr": "1. move",
+                    "mvyear": move_year,
+                    "mvmonth": move_month,
+                    "LINKCEN2010": move_geoid,
+                    "year": np.nan,  # Not applicable for moves
+                }
+            )
+
+            current_year = move_year
+
+    return rows
+
+
+def create_survey_data(n_people: int = 55) -> List[dict]:
+    """
+    Create fake survey/interview data matching the residential history IDs.
+
+    Parameters
+    ----------
+    n_people : int
+        Number of people to generate (default 55)
+
+    Returns
+    -------
+    List[dict]
+        List of dictionaries representing survey data rows
+    """
+    hhidpns = generate_fake_hhidpn(n_people)
+    rows = []
+
+    for hhidpn in hhidpns:
+        # Generate interview date between 2015-2020
+        interview_year = np.random.randint(2015, 2021)
+        interview_month = np.random.randint(1, 13)
+        interview_day = np.random.randint(1, 29)  # Avoid day 30/31 issues
+
+        bcdate = f"{interview_year}-{interview_month:02d}-{interview_day:02d}"
+
+        # Create static GEOID columns for different years (2010, 2015, 2020)
+        geoid_2010 = generate_fake_geoid()
+        geoid_2015 = generate_fake_geoid()
+        geoid_2020 = generate_fake_geoid()
+
+        rows.append(
+            {
+                "hhidpn": hhidpn,
+                "bcdate": bcdate,
+                "LINKCEN2010_2010": geoid_2010,
+                "LINKCEN2010_2015": geoid_2015,
+                "LINKCEN2010_2020": geoid_2020,
+                # Add some additional survey variables
+                "age": np.random.randint(50, 90),
+                "gender": np.random.choice(["Male", "Female"]),
+                "education": np.random.choice(
+                    ["Less than HS", "HS", "Some College", "College+"]
+                ),
+            }
+        )
+
+    return rows
+
+
+def write_csv_file(data: List[dict], filename: str):
+    """Write data to CSV file."""
+    if not data:
+        return
+
+    # Get column names from first row
+    columns = list(data[0].keys())
+
+    with open(filename, "w") as f:
+        # Write header
+        f.write(",".join(columns) + "\n")
+
+        # Write data rows
+        for row in data:
+            values = []
+            for col in columns:
+                value = row[col]
+                # Check for NaN (using numpy's isnan for float values)
+                if isinstance(value, float) and np.isnan(value):
+                    values.append("")
+                elif isinstance(value, str) and "," in value:
+                    values.append(f'"{value}"')  # Quote strings with commas
+                else:
+                    values.append(str(value))
+            f.write(",".join(values) + "\n")
+
+
+def main():
+    """Generate test data files."""
+    from pathlib import Path
+
+    # Create test data directory
+    test_data_dir = Path(__file__).parent / "test_data"
+    test_data_dir.mkdir(parents=True, exist_ok=True)
+
+    print("Generating residential history data...")
+    residential_data = create_residential_history_data()
+    residential_file = test_data_dir / "fake_residential_history.csv"
+    write_csv_file(residential_data, residential_file)
+    print(f"Created {residential_file} with {len(residential_data)} rows")
+
+    print("Generating survey data...")
+    survey_data = create_survey_data()
+    survey_file = test_data_dir / "fake_survey_data.csv"
+    write_csv_file(survey_data, survey_file)
+    print(f"Created {survey_file} with {len(survey_data)} rows")
+
+    print("\nData summary:")
+    print(f"Residential data rows: {len(residential_data)}")
+    print(f"Survey data rows: {len(survey_data)}")
+
+    # Count unique people
+    residential_people = set(row["hhidpn"] for row in residential_data)
+    survey_people = set(row["hhidpn"] for row in survey_data)
+    print(f"Unique people in residential: {len(residential_people)}")
+    print(f"Unique people in survey: {len(survey_people)}")
+
+
+if __name__ == "__main__":
+    main()

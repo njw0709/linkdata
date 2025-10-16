@@ -55,8 +55,9 @@ id_col = "hhidpn"
 n_lags = 2191
 use_parallel = True  # 👈 Toggle this to False for sequential processing
 
-temp_dir = Path(tempfile.mkdtemp(prefix="hrs_lag_parallel_"))
-print(f"⚡ Temporary files will be written to: {temp_dir}")
+temp_dir = Path(save_dir) / "temp_lag_files"
+temp_dir.mkdir(parents=True, exist_ok=True)
+print(f"⚡ Temporary lag files will be saved to: {temp_dir}")
 
 temp_files: list[Path] = []
 

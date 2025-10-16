@@ -10,3 +10,8 @@ wheels/
 .venv
 notebooks/
 .DS_Store
+.cursor
+
+#data files
+*.dta
+*.csv
