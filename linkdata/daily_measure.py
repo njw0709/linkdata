@@ -2,35 +2,48 @@ from .heat_index import HeatIndexData, HeatIndexDataDir
 import os
 from typing import Union
 
-FILENAME_TO_VARNAME_DICT = {'tmmx': 'Tmax', 'rmin': 'Rmin', 'pm25': "pm25", "ozone": "o3"}
+FILENAME_TO_VARNAME_DICT = {
+    "tmmx": "Tmax",
+    "rmin": "Rmin",
+    "pm25": "pm25",
+    "ozone": "o3",
+}
 
 
 class DailyMeasureData(HeatIndexData):
-    def __init__(self, 
-                 file_name: str, 
-                 heat_index_col: str,
-                 read_dtype: str ='float32', 
-                 format: str ='long', 
-                 geoid_col: str = "GEOID10", 
-                 date_col: str = "Date",
-                 rename_col: Union[dict, None] = None,
-                 ):
-        super().__init__(file_name, 
-                        read_dtype=read_dtype, 
-                        format=format, 
-                        geoid_col=geoid_col, 
-                        date_col=date_col, 
-                        heat_index_col=heat_index_col,
-                        rename_col=rename_col)
+    def __init__(
+        self,
+        file_name: str,
+        heat_index_col: str,
+        read_dtype: str = "float32",
+        format: str = "long",
+        geoid_col: str = "GEOID10",
+        date_col: str = "Date",
+        rename_col: Union[dict, None] = None,
+    ):
+        super().__init__(
+            file_name,
+            read_dtype=read_dtype,
+            format=format,
+            geoid_col=geoid_col,
+            date_col=date_col,
+            heat_index_col=heat_index_col,
+            rename_col=rename_col,
+        )
 
 
 class DailyMeasureDataDir(HeatIndexDataDir):
-    def __init__(self, dir_name: str, 
-                 measure_type: str, 
-                 rename_col_dict: Union[dict, None] = None, 
-                 column_name_to_choose: Union[None, str] = None):
+    def __init__(
+        self,
+        dir_name: str,
+        measure_type: str,
+        rename_col_dict: Union[dict, None] = None,
+        column_name_to_choose: Union[None, str] = None,
+    ):
         super().__init__(dir_name)
-        self.files = [f for f in os.listdir(dir_name) if f.endswith('csv') and measure_type in f]
+        self.files = [
+            f for f in os.listdir(dir_name) if f.endswith("csv") and measure_type in f
+        ]
         self.years_available = self.get_all_years_available()
         self.data = {yr: None for yr in self.years_available}
         self.rename_col_dict = rename_col_dict
@@ -53,5 +66,7 @@ class DailyMeasureDataDir(HeatIndexDataDir):
                 colname = FILENAME_TO_VARNAME_DICT[self.measure_type]
             else:
                 colname = self.column_to_choose
-            self.data[year_key] = DailyMeasureData(os.path.join(self.dirname, filename), colname, rename_col=rename_col)
+            self.data[year_key] = DailyMeasureData(
+                os.path.join(self.dirname, filename), colname, rename_col=rename_col
+            )
         return self.data[year_key]
