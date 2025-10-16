@@ -1,72 +1,403 @@
-from .heat_index import HeatIndexData, HeatIndexDataDir
-import os
-from typing import Union
+from __future__ import annotations
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+import pandas as pd
+import re
 
+# Map file prefix to column name
 FILENAME_TO_VARNAME_DICT = {
     "tmmx": "Tmax",
     "rmin": "Rmin",
     "pm25": "pm25",
     "ozone": "o3",
+    "heat_index": "HeatIndex",
 }
 
 
-class DailyMeasureData(HeatIndexData):
+class DailyMeasureData:
+    """
+    Wrapper for a single daily measure CSV file (e.g., Tmax, PM2.5, HeatIndex).
+    Can read both 'long' and 'wide' formats and reshape if needed.
+    """
+
+    YEAR_PATTERN = re.compile(r"(\d{4})")
+
     def __init__(
         self,
-        file_name: str,
-        heat_index_col: str,
+        file_path: Union[str, Path],
+        data_col: Optional[str] = None,
+        measure_type: Optional[str] = None,
         read_dtype: str = "float32",
-        format: str = "long",
+        expected_format: str = "long",
         geoid_col: str = "GEOID10",
         date_col: str = "Date",
-        rename_col: Union[dict, None] = None,
+        rename_col: Optional[dict] = None,
     ):
-        super().__init__(
-            file_name,
-            read_dtype=read_dtype,
-            format=format,
-            geoid_col=geoid_col,
-            date_col=date_col,
-            heat_index_col=heat_index_col,
-            rename_col=rename_col,
+        """
+        Initialize a DailyMeasureData object by reading and processing a single
+        daily measure CSV file.
+
+        This class supports both **long** format (one row per GEOID–date combination)
+        and **wide** format (dates as rows, GEOIDs as columns). Wide-format files are
+        automatically reshaped to long format if `expected_format="long"`.
+
+        Parameters
+        ----------
+        file_path : str or Path
+            Path to the daily measure CSV file (e.g., "heat_2010.csv").
+
+        data_col : str, optional
+            Name of the column containing the daily measure values (e.g., "HeatIndex",
+            "Tmax", "pm25"). If not provided, it will be inferred from `measure_type`
+            using the global mapping `FILENAME_TO_VARNAME_DICT`.
+
+        measure_type : str, optional
+            Shorthand identifier for the type of daily measure (e.g., "heat", "tmmx",
+            "pm25"). Used to look up the appropriate `data_col` name if `data_col`
+            is not explicitly provided. Either `data_col` or `measure_type` must be
+            provided.
+
+        read_dtype : str, default "float32"
+            Numeric dtype to use when reading the data column. Using "float32"
+            typically reduces memory footprint with minimal precision loss.
+
+        expected_format : {"long", "wide"}, default "long"
+            Expected format for downstream processing. If the file is wide but
+            `expected_format="long"`, the data will be melted into long format.
+
+        geoid_col : str, default "GEOID10"
+            Name of the column that stores geographic identifiers. In wide format,
+            this name will be used as the `var_name` when melting columns.
+
+        date_col : str, default "Date"
+            Name of the column containing date information. Dates are parsed into
+            pandas `datetime64[ns]` dtype.
+
+        rename_col : dict, optional
+            Optional dictionary for renaming columns **before** processing, typically
+            used to handle inconsistent column names across years (e.g.,
+            `{"HeatIndex_2010": "HeatIndex"}`).
+
+        Raises
+        ------
+        FileNotFoundError
+            If the file does not exist at `file_path`.
+
+        ValueError
+            If neither `data_col` nor `measure_type` is provided.
+        ValueError
+            If the inferred or specified `data_col` is not found in the file after applying `rename_col`.
+        ValueError
+            If the file format cannot be parsed (e.g., malformed CSV, missing required columns).
+
+        Notes
+        -----
+        - Only the header is initially read to detect column names and format, which
+          makes it efficient for large files.
+        - For wide-format files, all columns are read so that they can be melted to
+          long format. For long-format files, only the relevant columns are read.
+        - The GEOID column is zero-padded to 11 characters to standardize identifiers.
+        - After initialization, the processed data is stored in `self.df` as a
+          pandas DataFrame with standardized columns: `[date_col, geoid_col, data_col]`.
+
+        Examples
+        --------
+        >>> data = DailyMeasureData("data/heat_2010.csv", measure_type="heat")
+        >>> data.df.head()
+                 Date      GEOID10  HeatIndex
+        0  2010-01-01  01001020100       45.2
+        1  2010-01-01  01001020200       43.8
+        2  2010-01-01  01001020300       44.1
+        """
+        self.filepath = Path(file_path)
+        self.date_col = date_col
+        self.geoid_col = geoid_col
+        self.read_dtype = read_dtype
+        self.expected_format = expected_format
+        self.rename_col = rename_col
+
+        # Infer data_col from measure_type if not explicitly passed
+        if data_col is None:
+            if measure_type is None:
+                raise ValueError("Either `data_col` or `measure_type` must be provided")
+            data_col = FILENAME_TO_VARNAME_DICT[measure_type]
+        self.data_col = data_col
+
+        # --- 1. Inspect header and apply rename if needed ---
+        header = self._read_csv_header()
+        self.columns = header.columns.tolist()
+
+        # Check if target data_col is in columns after renaming
+        if self.data_col not in self.columns:
+            raise ValueError(
+                f"Column `{self.data_col}` not found in file: {self.filepath.name}\n"
+                f"Available columns: {self.columns}"
+            )
+
+        # Detect format
+        self.format = "wide" if len(self.columns) > 4 else "long"
+
+        # --- 2. Load data ---
+        dtype_dict = (
+            {self.data_col: self.read_dtype} if self.read_dtype != "float64" else None
         )
 
+        if self.format == "long":
+            usecols = [self.date_col, self.geoid_col, self.data_col]
+        else:
+            usecols = None  # need all columns to melt later
 
-class DailyMeasureDataDir(HeatIndexDataDir):
+        df = pd.read_csv(
+            self.filepath,
+            dtype=dtype_dict,
+            usecols=usecols,
+            parse_dates=[self.date_col] if self.date_col in self.columns else None,
+        )
+
+        df = self._apply_rename(df)
+
+        # --- 3. Reshape if wide ---
+        if self.format == "wide" and self.expected_format == "long":
+            df = df.melt(
+                id_vars=[self.date_col],
+                var_name=self.geoid_col,
+                value_name=self.data_col,
+            )
+
+        # --- 4. Format columns ---
+        if df[self.date_col].dtype != "datetime64[ns]":
+            df[self.date_col] = pd.to_datetime(df[self.date_col], errors="coerce")
+        df[self.geoid_col] = df[self.geoid_col].astype(str).str.zfill(11)
+
+        self.df = df
+
+    # ------------------------------------------------------------------
+    # Helper methods
+    # ------------------------------------------------------------------
+    def _apply_rename(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply column renaming if a rename dict is provided."""
+        if self.rename_col:
+            return df.rename(columns=self.rename_col)
+        return df
+
+    def _read_csv_header(self) -> pd.DataFrame:
+        """Read header row and apply rename to check columns."""
+        header = pd.read_csv(self.filepath, nrows=0)
+        return self._apply_rename(header)
+
+    def __repr__(self):
+        return f"DailyMeasureData({self.filepath.name}, col={self.data_col}, format={self.format}, rows={len(self.df)})"
+
+    def head(self, n=5):
+        return self.df.head(n)
+
+
+class DailyMeasureDataDir:
+    """
+    Directory wrapper that lazy-loads yearly DailyMeasureData files
+    for a given measure type, validating column presence similarly to
+    DailyMeasureData itself.
+    """
+
+    YEAR_PATTERN = re.compile(r"(\d{4})")
+
     def __init__(
         self,
-        dir_name: str,
-        measure_type: str,
-        rename_col_dict: Union[dict, None] = None,
-        column_name_to_choose: Union[None, str] = None,
+        dir_name: Union[str, Path],
+        measure_type: Optional[str] = None,
+        data_col: Optional[str] = None,
+        rename_col_dict: Optional[dict] = None,
+        read_dtype: str = "float32",
     ):
-        super().__init__(dir_name)
-        self.files = [
-            f for f in os.listdir(dir_name) if f.endswith("csv") and measure_type in f
-        ]
-        self.years_available = self.get_all_years_available()
-        self.data = {yr: None for yr in self.years_available}
-        self.rename_col_dict = rename_col_dict
-        self.measure_type = measure_type
-        self.column_to_choose = column_name_to_choose
+        """
+        Initialize a directory-level wrapper for daily measure CSV files spanning multiple years.
 
-    def __getitem__(self, year: int) -> DailyMeasureData:
-        year_key = str(year)
-        if self.data[year_key] is None:
-            filename = self.files[self.years_available.index(year_key)]
-            print("loading file:{}".format(filename))
-            if year_key in self.rename_col_dict.keys():
-                rename_col = self.rename_col_dict[year_key]
-            else:
-                if self.rename_col_dict is None:
-                    rename_col = None
-                else:
-                    rename_col = self.rename_col_dict.copy()
-            if self.column_to_choose is None:
-                colname = FILENAME_TO_VARNAME_DICT[self.measure_type]
-            else:
-                colname = self.column_to_choose
-            self.data[year_key] = DailyMeasureData(
-                os.path.join(self.dirname, filename), colname, rename_col=rename_col
+        This class manages:
+        - Locating all yearly CSV files for a given `measure_type` (or all files if `measure_type` is None),
+        - Validating that each file contains the expected `data_col` (after applying any year-specific renaming),
+        - Lazy-loading and caching of `DailyMeasureData` objects by year.
+
+        Parameters
+        ----------
+        dir_name : str or Path
+            Directory containing yearly CSV files. Each file should typically correspond
+            to one year (e.g., "heat_2010.csv", "heat_2011.csv", ...).
+
+        measure_type : str, optional
+            Measurement type identifier (e.g., "tmmx", "heat", "pm25").
+            File names must contain this measurement type as a substring in order to be included.
+            If `data_col` is not provided, it will be inferred using the global mapping
+            `FILENAME_TO_VARNAME_DICT[measure_type]`.
+
+        data_col : str, optional
+            Explicit name of the data column to use when loading each file.
+            If provided, this overrides the `measure_type` inference.
+
+        rename_col_dict : dict, optional
+            Optional mapping from year (as string) to column-renaming dictionaries.
+            Each rename dictionary is applied before validating and reading the CSV file
+            for that year. Useful when column names vary between years, e.g.:
+
+            >>> rename_col_dict = {
+            ...     "2010": {"HeatIndex_2010": "HeatIndex"},
+            ...     "2011": {"HeatIndex2011": "HeatIndex"}
+            ... }
+
+        read_dtype : str, default "float32"
+            Data type to use for the data column when reading. Using "float32" typically
+            reduces memory footprint with minimal precision loss.
+
+        Raises
+        ------
+        FileNotFoundError
+            If `dir_name` does not exist.
+
+        ValueError
+            If neither `measure_type` nor `data_col` is provided.
+        ValueError
+            If no CSV files matching `measure_type` are found in the directory.
+        ValueError
+            If any file does not contain the expected `data_col` after applying its
+            year-specific renaming dictionary. The error message will list all problematic files.
+
+        Notes
+        -----
+        - File names must contain a **4-digit year**, which is extracted automatically.
+          Duplicate years are not allowed.
+        - Files are **not read immediately**. They are only validated for the presence of
+          the `data_col` in their headers. Actual reading happens when accessing `dir[year]`.
+        - All loaded data is cached in memory per year for fast repeated access.
+        - Typically used together with `HRSContextLinker` for linking daily environmental
+          measures to survey data across multiple lag periods.
+
+        Examples
+        --------
+        >>> # Directory contains: heat_2010.csv, heat_2011.csv, ...
+        >>> heat_dir = DailyMeasureDataDir(
+        ...     dir_name="data/daily_heat_long",
+        ...     measure_type="heat",
+        ...     rename_col_dict={"2010": {"HeatIndex_2010": "HeatIndex"}}
+        ... )
+        >>> heat_dir.list_years()
+        ['2010', '2011', '2012', ...]
+
+        >>> # Load a specific year
+        >>> df_2010 = heat_dir[2010].df
+        >>> df_2010.head()
+                 Date      GEOID10  HeatIndex
+        0  2010-01-01  01001020100       45.2
+        1  2010-01-01  01001020200       43.8
+        2  2010-01-01  01001020300       44.1
+        """
+        self.dirpath = Path(dir_name)
+        if not self.dirpath.exists():
+            raise FileNotFoundError(f"Directory not found: {self.dirpath}")
+
+        # Validate data_col / measure_type logic
+        if data_col is None and measure_type is None:
+            raise ValueError("Either `data_col` or `measure_type` must be provided")
+        if data_col is None:
+            data_col = FILENAME_TO_VARNAME_DICT[measure_type]
+        self.data_col = data_col
+        self.measure_type = measure_type
+        self.read_dtype = read_dtype
+
+        # Rename dict per year (optional)
+        self.rename_col_dict = rename_col_dict or {}
+
+        # Collect files for measure_type if specified, otherwise all
+        if measure_type is not None:
+            self.files: List[Path] = sorted(
+                f for f in self.dirpath.glob("*.csv") if measure_type in f.name
             )
-        return self.data[year_key]
+        else:
+            self.files: List[Path] = sorted(self.dirpath.glob("*.csv"))
+
+        if not self.files:
+            raise ValueError(
+                f"No CSV files found for measure type '{measure_type}' in {dir_name}"
+            )
+
+        # Build year → file mapping
+        self.year_to_file: Dict[str, Path] = self._build_year_file_map()
+        self.years_available: List[str] = sorted(self.year_to_file.keys())
+
+        # Validate that each file contains the expected data_col
+        self._validate_files_have_datacol()
+
+        # Cache for loaded DailyMeasureData objects
+        self._cache: Dict[str, DailyMeasureData] = {}
+
+    # ------------------------------------------------------------------
+    def _build_year_file_map(self) -> Dict[str, Path]:
+        mapping = {}
+        for f in self.files:
+            m = self.YEAR_PATTERN.search(f.name)
+            if not m:
+                raise ValueError(f"Could not extract year from filename: {f.name}")
+            year = m.group(1)
+            if year in mapping:
+                raise ValueError(f"Duplicate year {year} found in directory")
+            mapping[year] = f
+        return mapping
+
+    # ------------------------------------------------------------------
+    def _validate_files_have_datacol(self):
+        """
+        Checks that each file contains the expected data_col after applying
+        any renaming rules for that year. Raises informative error otherwise.
+        """
+        missing = []
+        for year, fpath in self.year_to_file.items():
+            # Read just the header
+            header = pd.read_csv(fpath, nrows=0)
+            rename_dict = self.rename_col_dict.get(year, None)
+            if rename_dict:
+                header = header.rename(columns=rename_dict)
+
+            if self.data_col not in header.columns:
+                missing.append((year, fpath.name, list(header.columns)))
+
+        if missing:
+            msg_lines = ["The following files do not contain the expected column:"]
+            for year, fname, cols in missing:
+                msg_lines.append(f" - {year} ({fname}): available columns = {cols}")
+            raise ValueError("\n".join(msg_lines))
+
+    # ------------------------------------------------------------------
+    def __getitem__(self, year: Union[int, str]) -> DailyMeasureData:
+        """
+        Lazy load a specific year's DailyMeasureData object.
+        """
+        year_key = str(year)
+        if year_key not in self.year_to_file:
+            raise KeyError(
+                f"Year {year_key} not found. Available: {self.years_available}"
+            )
+
+        if year_key not in self._cache:
+            file_path = self.year_to_file[year_key]
+            rename_col = self.rename_col_dict.get(year_key, None)
+
+            print(
+                f"📥 Loading {self.measure_type or self.data_col} file for year {year_key}: {file_path.name}"
+            )
+
+            self._cache[year_key] = DailyMeasureData(
+                file_path=file_path,
+                data_col=self.data_col,
+                measure_type=self.measure_type,
+                read_dtype=self.read_dtype,
+                rename_col=rename_col,
+            )
+
+        return self._cache[year_key]
+
+    # ------------------------------------------------------------------
+    def list_years(self) -> List[str]:
+        return self.years_available
+
+    def __repr__(self):
+        years_str = ", ".join(self.years_available)
+        measure = self.measure_type or self.data_col
+        return f"DailyMeasureDataDir({self.dirpath}, measure={measure}, years=[{years_str}])"

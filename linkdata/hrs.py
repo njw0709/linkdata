@@ -1,13 +1,25 @@
+from __future__ import annotations
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
 import pandas as pd
-from .heat_index import HeatIndexDataDir
-from typing import Union
 from tqdm import tqdm
 
+from .daily_measure import DailyMeasureDataDir  # unified DailyMeasure classes
 
+
+# ---------------------------------------------------------------------
+# 1. ResidentialHistoryHRS
+# ---------------------------------------------------------------------
 class ResidentialHistoryHRS:
+    """
+    Parses respondent-level residential move history from HRS geocoded data,
+    and enables date-based GEOID lookup for linkage with contextual datasets.
+    """
+
     def __init__(
         self,
-        filename: str,
+        filename: Union[str, Path],
         hhidpn: str = "hhidpn",
         movecol: str = "trmove_tr",
         mvyear: str = "mvyear",
@@ -17,220 +29,301 @@ class ResidentialHistoryHRS:
         survey_yr_col: str = "year",
         first_tract_mark: float = 999.0,
     ):
-        self.filename = filename
+        self.filename = Path(filename)
         self.hhidpn = hhidpn
         self.movecol = movecol
         self.mvyear = mvyear
         self.mvmonth = mvmonth
         self.moved_mark = moved_mark
-        self.df = pd.read_stata(filename)
         self.geoid = geoid
         self.survey_yr_col = survey_yr_col
         self.first_tract_mark = first_tract_mark
-        self.move_info_dict = self._parse_move_info()
 
-    def _parse_move_info(self):
-        print("parsing move info...")
-        all_pplid = self.df[self.hhidpn].unique()
+        # Load only once (Stata read can be expensive)
+        self.df = pd.read_stata(self.filename)
+        self._move_info = self._parse_move_info()
+
+    def _parse_move_info(self) -> Dict[str, tuple[list[pd.Timestamp], list[str]]]:
+        """
+        Builds a dict mapping hhidpn → (list of move dates, list of corresponding GEOIDs)
+        """
+        print("📌 Parsing residential move history...")
         move_info = {}
-        for hhidpn in tqdm(all_pplid):
-            move_data_person = self.df[self.df[self.hhidpn] == hhidpn]
-            move_dates = []
-            move_geoids = []
-            first_row = move_data_person[
-                move_data_person[self.movecol] == self.first_tract_mark
-            ]
-            if len(first_row) == 0:
+        for pid, df_person in tqdm(self.df.groupby(self.hhidpn)):
+            dates, geoids = [], []
+
+            # First tract
+            first_rows = df_person[df_person[self.movecol] == self.first_tract_mark]
+            if first_rows.empty:
                 continue
-            else:
-                first_row = first_row.iloc[0]
-            dt_str = "{}-01-01".format(int(first_row[self.survey_yr_col]))
-            dt = pd.to_datetime(dt_str)
-            move_dates.append(dt)
-            move_geoids.append(first_row[self.geoid])
-            # moved
-            moved_rows = move_data_person[
-                move_data_person[self.movecol] == self.moved_mark
-            ]
-            if len(moved_rows) > 0:
-                for row_id, row in moved_rows.iterrows():
-                    if row[self.movecol] == self.moved_mark:
-                        dt_str = "{}-{}-01".format(
-                            int(row[self.mvyear]), int(row[self.mvmonth])
-                        )
-                        dt = pd.to_datetime(dt_str)
-                        move_dates.append(dt)
-                        move_geoids.append(row[self.geoid])
-            move_info[hhidpn] = (move_dates, move_geoids)
+            first = first_rows.iloc[0]
+            start_dt = pd.to_datetime(f"{int(first[self.survey_yr_col])}-01-01")
+            dates.append(start_dt)
+            geoids.append(str(first[self.geoid]).zfill(11))
+
+            # Subsequent moves
+            moved_rows = df_person[df_person[self.movecol] == self.moved_mark]
+            for _, row in moved_rows.iterrows():
+                dt = pd.to_datetime(
+                    f"{int(row[self.mvyear])}-{int(row[self.mvmonth])}-01"
+                )
+                dates.append(dt)
+                geoids.append(str(row[self.geoid]).zfill(11))
+
+            move_info[pid] = (dates, geoids)
+
         return move_info
 
     @staticmethod
-    def find_index(dt, move_dt_list):
-        if len(move_dt_list) == 1:
-            return 0
-        for i, move_dt in enumerate(move_dt_list):
+    def _find_geoid_for_date(
+        dt: pd.Timestamp, move_dates: list[pd.Timestamp], move_geoids: list[str]
+    ) -> Optional[str]:
+        """Return geoid for dt, or None if dt is earlier than first recorded move."""
+        if dt < move_dates[0]:
+            return None  # or pd.NA if you prefer pandas NA semantics
+
+        if len(move_dates) == 1:
+            return move_geoids[0]
+
+        for i, move_dt in enumerate(move_dates):
             if move_dt > dt:
-                return i - 1
-        return i
+                return move_geoids[i - 1]
+
+        return move_geoids[-1]
 
     def create_geoid_based_on_date(
-        self, hhidpn: pd.Series, date: Union[pd.Timestamp, pd.Series]
-    ):
-        # get all move timestamps
-        if isinstance(date, pd.Timestamp):
-            date = pd.Series([date for _ in range(len(hhidpn))])
-
+        self, hhidpn_series: pd.Series, date_series: pd.Series
+    ) -> pd.Series:
+        """
+        Returns a Series of GEOIDs aligned with hhidpn_series,
+        based on the move history and the provided dates.
+        """
+        assert len(hhidpn_series) == len(date_series)
         geoids = []
-        assert len(hhidpn) == len(date)
-        for i, idpn in enumerate(hhidpn):
-            (move_dates, move_geoids) = self.move_info_dict[idpn]
-            dt = date.iloc[i]
-            geoid_idx = ResidentialHistoryHRS.find_index(dt, move_dates)
-            geoids.append(move_geoids[geoid_idx])
-        geoids = pd.Series(geoids).astype(str).str.zfill(11)
-        assert len(geoids) == len(hhidpn)
-        geoids.index = hhidpn.index
-        return geoids
+        for pid, dt in zip(hhidpn_series, date_series):
+            move_dates, move_geoids = self._move_info[pid]
+            geoids.append(self._find_geoid_for_date(dt, move_dates, move_geoids))
+        return pd.Series(geoids, index=hhidpn_series.index, dtype="string")
 
 
-class HRSEpigenetics:
+# ---------------------------------------------------------------------
+# 2. HRSEpigenetics
+# ---------------------------------------------------------------------
+class HRSInterviewData:
+    """
+    Wrapper around survey data with interview (or blood collection date
+    for epigenetic biomarker data (e.g., HRS VBS)).
+    adding date-based GEOID creation for linkage with contextual data.
+    """
+
     def __init__(
         self,
-        filename: str,
+        filename: Union[str, Path],
         datecol: str = "bcdate",
         move: bool = True,
-        residential_hist: Union[None, ResidentialHistoryHRS] = None,
+        residential_hist: Optional[ResidentialHistoryHRS] = None,
         hhidpn: str = "hhidpn",
     ):
-        self.df = pd.read_stata(filename)
+        self.filename = Path(filename)
+        self.df = pd.read_stata(self.filename)
         self.columns = self.df.columns
-        assert datecol in self.columns, "Date column not in data!"
+        assert datecol in self.columns, f"Date column `{datecol}` not in data!"
+
         self.datecol = datecol
-        self.geoid_cols = [cname for cname in self.columns if "LINKCEN" in cname]
-        self.move = move
         self.hhidpn = hhidpn
-        if move:
-            self.residential_hist = residential_hist
-        else:
-            self.format_geoid()
+        self.move = move
+        self.residential_hist = residential_hist
 
-    def format_geoid(self) -> None:
-        for geoid_col in self.geoid_cols:
-            self.df[geoid_col] = self.df[geoid_col].astype(str).str.zfill(11)
+        # Format existing GEOIDs
+        geoid_cols = [c for c in self.columns if "LINKCEN" in c]
+        for col in geoid_cols:
+            self.df[col] = self.df[col].astype(str).str.zfill(11)
 
-    def get_geoid_based_on_date(self, datecol: pd.Series):
-        geoid_col = self.residential_hist.create_geoid_based_on_date(
-            self.df[self.hhidpn], datecol
+    def get_geoid_based_on_date(self, date_series: pd.Series) -> pd.Series:
+        return self.residential_hist.create_geoid_based_on_date(
+            self.df[self.hhidpn], date_series
         )
-        return geoid_col
 
-    def save(self, save_name) -> None:
+    def save(self, save_name: Union[str, Path]) -> None:
         self.df.to_stata(save_name)
 
 
-class LinkHRSHeat:
-    @staticmethod
-    def make_n_day_prior_cols(
-        hrs_epi_data: HRSEpigenetics, n_day_prior: int
-    ) -> HRSEpigenetics:
-        """
-        creates n-day prior column from the date column
-        """
-        colname = "{}_{}day_prior".format(hrs_epi_data.datecol, n_day_prior)
-        nday_prior_col = hrs_epi_data.df[hrs_epi_data.datecol] - pd.Timedelta(
-            n_day_prior, "d"
-        )
-        nday_prior_col.rename(colname, inplace=True)
-        hrs_epi_data.df = pd.concat([hrs_epi_data.df, nday_prior_col], axis=1)
-        return hrs_epi_data, colname
+# ---------------------------------------------------------------------
+# 3. HRSContextLinker
+# ---------------------------------------------------------------------
+from typing import Optional, List
+import pandas as pd
 
+
+class HRSContextLinker:
+    """
+    Handles temporal/geographic alignment between HRS epigenetic data
+    and contextual daily measure data (e.g., heat index, Tmax, PM2.5),
+    including:
+    - n-day prior date column creation
+    - GEOID column assignment based on residential history or static data
+    - Single or batch merging with contextual data sources
+    - Outputting merged columns for parallel workflows
+    """
+
+    # ------------------------------------------------------------------
+    # 1. n-day prior date column
+    # ------------------------------------------------------------------
+    @staticmethod
+    def make_n_day_prior_cols(hrs_data: "HRSInterviewData", n_day_prior: int) -> str:
+        """
+        Create a new column representing the date n days prior to the
+        respondent's reference date column.
+        """
+        colname = f"{hrs_data.datecol}_{n_day_prior}day_prior"
+        hrs_data.df[colname] = hrs_data.df[hrs_data.datecol] - pd.to_timedelta(
+            n_day_prior, unit="d"
+        )
+        return colname
+
+    # ------------------------------------------------------------------
+    # 2. Geoid assignment for lag date
+    # ------------------------------------------------------------------
     @staticmethod
     def make_geoid_day_prior(
-        hrs_epi_data: HRSEpigenetics,
-        merge_date_colname: str,
-        geoid_colname: str = "LINKCEN",
-    ) -> HRSEpigenetics:
+        hrs_data: "HRSInterviewData",
+        merge_date_col: str,
+        geoid_prefix: str = "LINKCEN",
+        df: Optional[pd.DataFrame] = None,
+    ) -> str:
         """
-        creates geoid column to use for merging
+        Create a geoid column based on a lagged date column.
+        If df is provided, operate on that DataFrame instead of hrs_data.df.
         """
-        n_prior_str = "_".join(merge_date_colname.split("_")[1:])
-        colname = "{}_{}".format(geoid_colname, n_prior_str)
-        if hrs_epi_data.move:
-            n_day_prior_geoid = hrs_epi_data.get_geoid_based_on_date(
-                hrs_epi_data.df[merge_date_colname]
-            )
-            n_day_prior_geoid.rename(colname, inplace=True)
-            hrs_epi_data.df = pd.concat([hrs_epi_data.df, n_day_prior_geoid], axis=1)
+        target_df = hrs_data.df if df is None else df
+        n_prior_str = "_".join(merge_date_col.split("_")[1:])
+        colname = f"{geoid_prefix}_{n_prior_str}"
+
+        if hrs_data.move:
+            geoids = hrs_data.get_geoid_based_on_date(target_df[merge_date_col])
+            target_df[colname] = geoids
         else:
-            hrs_epi_data.df[colname] = hrs_epi_data.df.apply(
-                LinkHRSHeat.grab_geoid_for_year, axis=1, args=(merge_date_colname,)
-            )
-        return hrs_epi_data, colname
+            # Vectorized lookup from existing static columns
+            years = target_df[merge_date_col].dt.year.astype(str)
+            col_names = geoid_prefix + "2010_" + years
+            col_idx = hrs_data.df.columns.get_indexer(col_names)
+            row_idx = pd.RangeIndex(len(target_df))
+            geoid_values = hrs_data.df.to_numpy()[row_idx, col_idx]
+            target_df[colname] = geoid_values
 
-    @staticmethod
-    def grab_geoid_for_year(df_row, merge_date_colname) -> str:
-        """
-        grabs the year from merge date column
-        """
-        year = df_row[merge_date_colname].year
-        geoid_col = "LINKCEN2010_{}".format(year)
-        return df_row[geoid_col]
+        return colname
 
+    # ------------------------------------------------------------------
+    # 3. Merge HRS with contextual data (single big merge)
+    # ------------------------------------------------------------------
     @staticmethod
-    def merge_with_heat_index(
-        hrs_epi_data: HRSEpigenetics,
-        heat_index_data_all: HeatIndexDataDir,
-        left_on: list,
+    def merge_with_contextual_data(
+        hrs_data: "HRSInterviewData",
+        contextual_dir: "DailyMeasureDataDir",
+        left_on: List[str],
         drop_left: bool = True,
-    ) -> HRSEpigenetics:
-        # get all necessary years
+    ) -> "HRSInterviewData":
+        """
+        Merge HRS data with contextual daily data across all years in a single merge.
+        This is typically faster than looping year by year.
+        """
         date_col = left_on[0]
-        unique_years = hrs_epi_data.df[date_col].dt.year.unique()
-        # nday prior col
         nday_prior_str = "_".join(date_col.split("_")[1:])
 
-        # process by year
-        df_all_years = []
-        for yr in unique_years:
-            print("Linking year: {}".format(yr))
-            heat_index_data = heat_index_data_all[yr]
-            hrs_epi_df = hrs_epi_data.df[hrs_epi_data.df[date_col].dt.year == yr]
-            right_on = [heat_index_data.date_col, heat_index_data.geoid_col]
-            # check overlapping column names
-            heat_cols = [col for col in heat_index_data.columns if col not in right_on]
-            for col in heat_cols:
-                assert (
-                    col not in hrs_epi_data.columns
-                ), "Heat data has column name {} that is overlapping with the HRS data".format(
-                    col
-                )
-            print("Merging...")
-            hrs_epi_df = pd.merge(
-                hrs_epi_df,
-                heat_index_data.df,
-                how="left",
-                left_on=left_on,
-                right_on=right_on,
-                suffixes=(
-                    False,
-                    False,
-                ),  # throw error when both has colnames overlapping
-            )
-            # drop right keys
-            hrs_epi_df.drop(right_on, axis=1, inplace=True)
-            if drop_left:
-                hrs_epi_df.drop(left_on[1:], axis=1, inplace=True)
-            # rename data col
-            hrs_epi_df = hrs_epi_df.rename(
-                columns={
-                    heat_index_data.data_col: "{}_{}".format(
-                        heat_index_data.data_col, nday_prior_str
-                    )
-                }
-            )
-            df_all_years.append(hrs_epi_df)
+        # Build one contextual DataFrame from all years
+        years = contextual_dir.list_years()
+        contextual_df = pd.concat([contextual_dir[yr].df for yr in years], axis=0)
+        first_context = contextual_dir[years[0]]
+        right_on = [first_context.date_col, first_context.geoid_col]
 
-        hrs_epi_data.df = pd.concat(df_all_years)
-        hrs_epi_data.df.sort_index(inplace=True)
-        print("Done!")
-        return hrs_epi_data
+        # Check for overlapping columns
+        overlap = set(hrs_data.df.columns) & set(contextual_df.columns) - set(right_on)
+        if overlap:
+            raise ValueError(f"Column overlap during merge: {overlap}")
+
+        merged = pd.merge(
+            hrs_data.df,
+            contextual_df,
+            how="left",
+            left_on=left_on,
+            right_on=right_on,
+            suffixes=(None, None),
+        )
+
+        # Drop key columns if needed
+        merged.drop(right_on, axis=1, inplace=True)
+        if drop_left:
+            merged.drop(left_on[1:], axis=1, inplace=True)
+
+        # Rename contextual measure column to indicate lag
+        data_col = first_context.data_col
+        merged.rename(columns={data_col: f"{data_col}_{nday_prior_str}"}, inplace=True)
+
+        hrs_data.df = merged
+        return hrs_data
+
+    # ------------------------------------------------------------------
+    # 4. Output merged columns for a specific lag (no mutation)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def output_merged_columns(
+        hrs_data: "HRSInterviewData",
+        contextual_dir: "DailyMeasureDataDir",
+        n: int,
+        id_col: str,
+        include_lag_date: bool = False,
+    ) -> pd.DataFrame:
+        """
+        For a specific lag `n`, compute the n-day prior and geoid columns,
+        merge with contextual data, and return only the merged contextual
+        column plus ID (and optionally the lag date column).
+        This method does not modify hrs_data.df, making it suitable for
+        parallelized linkage workflows.
+        """
+        # Shallow copy of relevant columns
+        hrs_copy = hrs_data.df[[id_col, hrs_data.datecol]].copy()
+
+        # n-day prior date column
+        n_day_colname = f"{hrs_data.datecol}_{n}day_prior"
+        hrs_copy[n_day_colname] = hrs_copy[hrs_data.datecol] - pd.to_timedelta(
+            n, unit="d"
+        )
+
+        # Geoid column using helper
+        n_day_geoid_colname = HRSContextLinker.make_geoid_day_prior(
+            hrs_data, n_day_colname, df=hrs_copy
+        )
+
+        # If no valid geoid, return empty contextual column
+        if hrs_copy[n_day_geoid_colname].isna().all():
+            out_cols = [id_col]
+            if include_lag_date:
+                out_cols.append(n_day_colname)
+            return hrs_copy[out_cols]
+
+        # Merge with contextual data
+        years = contextual_dir.list_years()
+        contextual_df = pd.concat([contextual_dir[yr].df for yr in years], axis=0)
+        first_context = contextual_dir[years[0]]
+        right_on = [first_context.date_col, first_context.geoid_col]
+
+        merged = pd.merge(
+            hrs_copy,
+            contextual_df,
+            how="left",
+            left_on=[n_day_colname, n_day_geoid_colname],
+            right_on=right_on,
+            suffixes=(None, None),
+        )
+
+        # Rename contextual column
+        data_col = first_context.data_col
+        new_col_name = f"{data_col}_{n_day_colname}"
+        merged.rename(columns={data_col: new_col_name}, inplace=True)
+
+        out_cols = [id_col]
+        if include_lag_date:
+            out_cols.append(n_day_colname)
+        out_cols.append(new_col_name)
+
+        return merged[out_cols]
