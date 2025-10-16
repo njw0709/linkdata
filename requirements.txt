@@ -1,0 +1,8 @@
+pandas
+tqdm
+pyinstaller
+pytest
+Faker
+census
+us
+pygris
