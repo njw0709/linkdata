@@ -221,14 +221,14 @@ class HRSContextLinker:
         new_columns = {}
 
         # Create date columns for all lags
-        for n in n_days:
+        for n in tqdm(n_days, desc="Creating date columns", unit="lag"):
             date_colname = f"{hrs_data.datecol}_{n}day_prior"
             new_columns[date_colname] = result_df[hrs_data.datecol] - pd.to_timedelta(
                 n, unit="d"
             )
 
         # Create GEOID columns for all lags using the helper method
-        for n in n_days:
+        for n in tqdm(n_days, desc="Creating GEOID columns", unit="lag"):
             date_colname = f"{hrs_data.datecol}_{n}day_prior"
             n_prior_str = "_".join(date_colname.split("_")[1:])
             geoid_colname = f"{geoid_prefix}_{n_prior_str}"
