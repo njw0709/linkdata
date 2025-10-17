@@ -1,17 +1,30 @@
+#!/usr/bin/env python
+"""
+Lagged PM2.5 and O3 data linkage for HRS epigenetic age dataset.
+
+This script calls the link_lags.py CLI tool twice (once for PM2.5, once for O3)
+and then merges the results together.
+
+NOTE: The CLI tool doesn't currently support custom column renaming.
+Ensure your data files have the correct column names:
+- PM2.5: Date, GEOID10, pm25
+- O3: Date, GEOID10, o3
+"""
+
+from __future__ import annotations
+
+import subprocess
 from pathlib import Path
-from tqdm import tqdm
 import pandas as pd
 
-from linkdata.hrs import HRSInterviewData, ResidentialHistoryHRS, HRSContextLinker
-from linkdata.daily_measure import DailyMeasureDataDir
-
 # -------------------------------------------------------------------
-# 📁 File paths
+# 📁 Configuration
 # -------------------------------------------------------------------
 BASE_DIR = Path(r"C:\Users\BioDem\Documents\BioDem\Users\Choi_ec\Heat Epigenetic Age")
 hrs_data_path = BASE_DIR / "PrepData" / "HRSprep.dta"
 
-save_path = BASE_DIR / "Donotcopy" / "HRSPM25O3Linked.dta"
+save_dir = BASE_DIR / "Donotcopy"
+save_filename = "HRSPM25O3Linked.dta"
 
 residential_hist_path = Path(
     r"C:\Users\BioDem\Documents\BioDem\Data\CDR Data\Residential History\4. reshist 1992_2018 moving month\_ALL1992_2018_reshit_long_mvdate.dta"
@@ -20,87 +33,130 @@ residential_hist_path = Path(
 pm25_dir = Path(r"C:\Users\BioDem\Documents\BioDem\Users\Nam\Linkage\data\PM25")
 o3_dir = Path(r"C:\Users\BioDem\Documents\BioDem\Users\Nam\Linkage\data\O3")
 
-# -------------------------------------------------------------------
-# 📝 Column rename dictionaries
-# -------------------------------------------------------------------
-# If the same rename applies to all years, we wrap it as {year: dict} automatically inside DailyMeasureDataDir
-pm25_rename_cols = {"date": "Date", "fips": "GEOID10", "pm25_daily_averageugm3": "pm25"}
-o3_rename_cols = {"Date": "Date", "Loc_Label1": "GEOID10", "Prediction": "o3"}
+# Processing options
+id_col = "hhidpn"
+date_col = "bcdate"
+n_lags = 366
+use_parallel = True  # Set to True for parallel processing, False for sequential
 
 # -------------------------------------------------------------------
-# 🌫 Load daily measure directories
+# 🚀 Step 1: Link PM2.5 data
 # -------------------------------------------------------------------
-pm25_data_all = DailyMeasureDataDir(
-    dir_name=pm25_dir,
-    measure_type="pm25",
-    rename_col_dict=(
-        None
-        if not pm25_rename_cols
-        else {yr: pm25_rename_cols for yr in range(1992, 2020)}
-    ),
-)
+pm25_output = "HRSPM25Linked.dta"
 
-o3_data_all = DailyMeasureDataDir(
-    dir_name=o3_dir,
-    measure_type="ozone",
-    rename_col_dict=(
-        None if not o3_rename_cols else {yr: o3_rename_cols for yr in range(1992, 2020)}
-    ),
-)
+cmd_pm25 = [
+    "python",
+    "link_lags.py",
+    "--hrs-data",
+    str(hrs_data_path),
+    "--context-dir",
+    str(pm25_dir),
+    "--save-dir",
+    str(save_dir),
+    "--output_name",
+    pm25_output,
+    "--id-col",
+    id_col,
+    "--date-col",
+    date_col,
+    "--measure-type",
+    "pm25",
+    "--data-col",
+    "pm25",
+    "--residential-hist",
+    str(residential_hist_path),
+    "--n-lags",
+    str(n_lags),
+]
 
-# -------------------------------------------------------------------
-# 🏠 Load HRS data & residential history
-# -------------------------------------------------------------------
-print("📥 Loading residential history...")
-residential_hist = ResidentialHistoryHRS(residential_hist_path)
+if use_parallel:
+    cmd_pm25.append("--parallel")
 
-print("📥 Loading HRS interview data...")
-hrs_epi_data = HRSInterviewData(
-    hrs_data_path,
-    datecol="bcdate",
-    move=True,
-    residential_hist=residential_hist,
-)
+print("🌫 Running link_lags.py for PM2.5...")
+print(" ".join(cmd_pm25))
+print()
 
-# -------------------------------------------------------------------
-# 🔁 Main linkage loop
-# -------------------------------------------------------------------
-N_LAGS = 366
-ID_COL = "hhidpn"
+result_pm25 = subprocess.run(cmd_pm25, check=True)
 
-print(f"🔗 Linking {N_LAGS} daily lag columns for PM2.5 and O₃ ...")
-
-for n in tqdm(range(N_LAGS), desc="Lag processing"):
-    # PM2.5
-    pm25_df = HRSContextLinker.output_merged_columns(
-        hrs_epi_data,
-        pm25_data_all,
-        n=n,
-        id_col=ID_COL,
-        include_lag_date=False,
-    )
-
-    # O₃
-    o3_df = HRSContextLinker.output_merged_columns(
-        hrs_epi_data,
-        o3_data_all,
-        n=n,
-        id_col=ID_COL,
-        include_lag_date=False,
-    )
-
-    # Merge both new columns into main df
-    hrs_epi_data.df = hrs_epi_data.df.merge(pm25_df, on=ID_COL, how="left")
-    hrs_epi_data.df = hrs_epi_data.df.merge(o3_df, on=ID_COL, how="left")
-
-    # Periodic saving
-    if n % 10 == 0 and n > 0:
-        print(f"💾 Saving intermediate results after lag {n} ...")
-        hrs_epi_data.save(save_path)
+if result_pm25.returncode != 0:
+    print("❌ PM2.5 linkage failed!")
+    exit(result_pm25.returncode)
 
 # -------------------------------------------------------------------
-# 💾 Final save
+# 🚀 Step 2: Link O3 data
 # -------------------------------------------------------------------
-print("✅ Saving final dataset...")
-hrs_epi_data.save(save_path)
-print(f"🏁 Done. Linked dataset written to: {save_path}")
+o3_output = "HRSO3Linked.dta"
+
+cmd_o3 = [
+    "python",
+    "link_lags.py",
+    "--hrs-data",
+    str(hrs_data_path),
+    "--context-dir",
+    str(o3_dir),
+    "--save-dir",
+    str(save_dir),
+    "--output_name",
+    o3_output,
+    "--id-col",
+    id_col,
+    "--date-col",
+    date_col,
+    "--measure-type",
+    "ozone",
+    "--data-col",
+    "o3",
+    "--residential-hist",
+    str(residential_hist_path),
+    "--n-lags",
+    str(n_lags),
+]
+
+if use_parallel:
+    cmd_o3.append("--parallel")
+
+print("\n💨 Running link_lags.py for O3...")
+print(" ".join(cmd_o3))
+print()
+
+result_o3 = subprocess.run(cmd_o3, check=True)
+
+if result_o3.returncode != 0:
+    print("❌ O3 linkage failed!")
+    exit(result_o3.returncode)
+
+# -------------------------------------------------------------------
+# 🧱 Step 3: Merge PM2.5 and O3 results
+# -------------------------------------------------------------------
+print("\n📎 Merging PM2.5 and O3 datasets...")
+
+pm25_path = save_dir / pm25_output
+o3_path = save_dir / o3_output
+final_path = save_dir / save_filename
+
+# Load both datasets
+pm25_data = pd.read_stata(pm25_path)
+o3_data = pd.read_stata(o3_path)
+
+# Get column lists (excluding id_col)
+pm25_cols = [col for col in pm25_data.columns if col != id_col]
+o3_cols = [col for col in o3_data.columns if col != id_col]
+
+# Get only the new lag columns (assuming original HRS columns are the same in both)
+# We'll use PM2.5 as base and merge O3 lag columns
+pm25_lag_cols = [col for col in pm25_cols if "pm25" in col.lower()]
+o3_lag_cols = [col for col in o3_cols if "o3" in col.lower() or "ozone" in col.lower()]
+
+# Select columns to merge
+o3_to_merge = o3_data[[id_col] + o3_lag_cols]
+
+# Merge
+final_df = pm25_data.merge(o3_to_merge, on=id_col, how="left")
+
+# Save final dataset
+print(f"💾 Saving merged dataset to {final_path}")
+final_df.to_stata(final_path)
+
+print(f"\n✅ Linkage completed successfully!")
+print(f"📊 Final dataset shape: {final_df.shape}")
+print(f"🏁 Done. Linked dataset written to: {final_path}")
