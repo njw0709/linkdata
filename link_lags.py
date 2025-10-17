@@ -18,6 +18,28 @@ python link_lags.py \
     --data-col HeatIndex \
     --n-lags 2191 \
     --parallel
+
+With residential history:
+-------------------------
+python link_lags.py \
+    --hrs-data "C:/path/to/HRSprep2016full.dta" \
+    --residential-hist "C:/path/to/residential_history.dta" \
+    --res-hist-hhidpn hhidpn \
+    --res-hist-movecol trmove_tr \
+    --res-hist-mvyear mvyear \
+    --res-hist-mvmonth mvmonth \
+    --res-hist-moved-mark "1. move" \
+    --res-hist-geoid LINKCEN2010 \
+    --res-hist-survey-yr-col year \
+    --res-hist-first-tract-mark 999.0 \
+    --context-dir "C:/path/to/daily_heat_long" \
+    --output "C:/path/to/output/HRSHeatLinked.dta" \
+    --id-col hhidpn \
+    --date-col iwdate \
+    --measure-type heat_index \
+    --data-col HeatIndex \
+    --n-lags 2191 \
+    --parallel
 """
 
 import argparse
@@ -49,7 +71,17 @@ def main(args: argparse.Namespace):
     # -------------------------------------------------------------------
     if args.residential_hist:
         print("📥 Loading residential history...")
-        residential_hist = ResidentialHistoryHRS(Path(args.residential_hist))
+        residential_hist = ResidentialHistoryHRS(
+            filename=Path(args.residential_hist),
+            hhidpn=args.res_hist_hhidpn,
+            movecol=args.res_hist_movecol,
+            mvyear=args.res_hist_mvyear,
+            mvmonth=args.res_hist_mvmonth,
+            moved_mark=args.res_hist_moved_mark,
+            geoid=args.res_hist_geoid,
+            survey_yr_col=args.res_hist_survey_yr_col,
+            first_tract_mark=args.res_hist_first_tract_mark,
+        )
     else:
         residential_hist = None
 
@@ -176,6 +208,50 @@ if __name__ == "__main__":
     parser.add_argument(
         "--residential-hist", help="Path to residential history file (optional)"
     )
+
+    # Residential history configuration options
+    parser.add_argument(
+        "--res-hist-hhidpn",
+        default="hhidpn",
+        help="ID column name in residential history (default: hhidpn)",
+    )
+    parser.add_argument(
+        "--res-hist-movecol",
+        default="trmove_tr",
+        help="Move indicator column name in residential history (default: trmove_tr)",
+    )
+    parser.add_argument(
+        "--res-hist-mvyear",
+        default="mvyear",
+        help="Move year column name in residential history (default: mvyear)",
+    )
+    parser.add_argument(
+        "--res-hist-mvmonth",
+        default="mvmonth",
+        help="Move month column name in residential history (default: mvmonth)",
+    )
+    parser.add_argument(
+        "--res-hist-moved-mark",
+        default="1. move",
+        help="Value indicating a move occurred in residential history (default: '1. move')",
+    )
+    parser.add_argument(
+        "--res-hist-geoid",
+        default="LINKCEN2010",
+        help="GEOID column name in residential history (default: LINKCEN2010)",
+    )
+    parser.add_argument(
+        "--res-hist-survey-yr-col",
+        default="year",
+        help="Survey year column name in residential history (default: year)",
+    )
+    parser.add_argument(
+        "--res-hist-first-tract-mark",
+        type=float,
+        default=999.0,
+        help="Value indicating first tract in residential history (default: 999.0)",
+    )
+
     parser.add_argument(
         "--n-lags",
         type=int,
