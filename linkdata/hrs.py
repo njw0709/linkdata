@@ -6,6 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from .daily_measure import DailyMeasureDataDir
+from .io_utils import read_data, write_data
 
 
 # ---------------------------------------------------------------------
@@ -39,8 +40,8 @@ class ResidentialHistoryHRS:
         self.survey_yr_col = survey_yr_col
         self.first_tract_mark = first_tract_mark
 
-        # Load only once (Stata read can be expensive)
-        self.df = pd.read_stata(self.filename)
+        # Load only once (file read can be expensive)
+        self.df = read_data(self.filename)
         self._move_info = self._parse_move_info()
 
     def _parse_move_info(self) -> Dict[str, tuple[list[pd.Timestamp], list[str]]]:
@@ -126,7 +127,7 @@ class HRSInterviewData:
         geoid_prefix: str = "LINKCEN",
     ):
         self.filename = Path(filename)
-        self.df = pd.read_stata(self.filename)
+        self.df = read_data(self.filename)
         self.columns = self.df.columns
         assert datecol in self.columns, f"Date column `{datecol}` not in data!"
 
@@ -147,7 +148,7 @@ class HRSInterviewData:
         )
 
     def save(self, save_name: Union[str, Path]) -> None:
-        self.df.to_stata(save_name)
+        write_data(self.df, save_name)
 
 
 # ---------------------------------------------------------------------

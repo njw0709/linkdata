@@ -4,6 +4,8 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import re
 
+from .io_utils import read_data, get_file_format
+
 # Map file prefix to column name
 FILENAME_TO_VARNAME_DICT = {
     "tmmx": "Tmax",
@@ -131,7 +133,7 @@ class DailyMeasureData:
         self.data_col = data_col
 
         # --- 1. Inspect header and apply rename if needed ---
-        header = self._read_csv_header()
+        header = self._read_header()
         self.columns = header.columns.tolist()
 
         # Check if target data_col is in columns after renaming
@@ -145,88 +147,24 @@ class DailyMeasureData:
         self.format = "wide" if len(self.columns) > 4 else "long"
 
         # --- 2. Load data ---
-        dtype_dict = (
-            {self.data_col: self.read_dtype} if self.read_dtype != "float64" else None
-        )
+        # Detect file format
+        file_format = get_file_format(self.filepath)
 
-        if self.format == "long":
-            usecols = [self.date_col, self.geoid_col, self.data_col]
-        else:
-            usecols = None  # need all columns to melt later
-
-        # Use chunked reading with filtering for long format when geoid_filter is provided
-        if self.format == "long" and self.geoid_filter is not None:
-            print(
-                f"  Reading in chunks and filtering to {len(self.geoid_filter)} GEOIDs..."
-            )
-            chunks = []
-
-            # Try pyarrow engine first (faster), fall back to default C engine
-            try:
-                csv_reader = pd.read_csv(
-                    self.filepath,
-                    dtype=dtype_dict,
-                    usecols=usecols,
-                    chunksize=1_000_000,
-                    engine="pyarrow",
-                )
-            except (ImportError, ValueError, TypeError):
-                # pyarrow not available or doesn't support chunksize
-                csv_reader = pd.read_csv(
-                    self.filepath,
-                    dtype=dtype_dict,
-                    usecols=usecols,
-                    chunksize=1_000_000,
-                )
-
-            total_before = 0
-            for chunk in csv_reader:
-                chunk = self._apply_rename(chunk)
-                # Format GEOID for filtering
-                chunk[self.geoid_col] = chunk[self.geoid_col].astype(str).str.zfill(11)
-                # Filter immediately - discard unwanted data early
-                total_before += len(chunk)
-                filtered = chunk[chunk[self.geoid_col].isin(self.geoid_filter)]
-                if len(filtered) > 0:
-                    chunks.append(filtered)
-
-            df = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
-
-            # Parse dates after filtering (faster on smaller data)
-            if (
-                self.date_col in df.columns
-                and df[self.date_col].dtype != "datetime64[ns]"
-            ):
-                df[self.date_col] = pd.to_datetime(df[self.date_col], errors="coerce")
-
-            print(
-                f"  Filtered to {len(df):,} rows ({len(self.geoid_filter)} GEOIDs) from {total_before:,} rows"
+        # For non-CSV formats, use the flexible reader
+        if file_format != "csv":
+            dtype_dict = (
+                {self.data_col: self.read_dtype}
+                if self.read_dtype != "float64"
+                else None
             )
 
-            self.df = df
-        else:
-            # Original full-load path for wide format or no filtering
-            # Try pyarrow engine for speed, fall back to default
-            try:
-                df = pd.read_csv(
-                    self.filepath,
-                    dtype=dtype_dict,
-                    usecols=usecols,
-                    parse_dates=(
-                        [self.date_col] if self.date_col in self.columns else None
-                    ),
-                    engine="pyarrow",
-                )
-            except (ImportError, ValueError, TypeError):
-                df = pd.read_csv(
-                    self.filepath,
-                    dtype=dtype_dict,
-                    usecols=usecols,
-                    parse_dates=(
-                        [self.date_col] if self.date_col in self.columns else None
-                    ),
-                )
+            if self.format == "long":
+                usecols = [self.date_col, self.geoid_col, self.data_col]
+            else:
+                usecols = None  # need all columns to melt later
 
+            # Read the entire file using flexible reader
+            df = read_data(self.filepath, usecols=usecols, dtype=dtype_dict)
             df = self._apply_rename(df)
 
             # --- 3. Reshape if wide ---
@@ -242,7 +180,7 @@ class DailyMeasureData:
                 df[self.date_col] = pd.to_datetime(df[self.date_col], errors="coerce")
             df[self.geoid_col] = df[self.geoid_col].astype(str).str.zfill(11)
 
-            # --- 5. Filter by GEOID if provided (for wide format or non-chunked reads) ---
+            # --- 5. Filter by GEOID if provided ---
             if self.geoid_filter is not None:
                 before_count = len(df)
                 df = df[df[self.geoid_col].isin(self.geoid_filter)]
@@ -253,6 +191,124 @@ class DailyMeasureData:
 
             self.df = df
 
+        # For CSV files, use optimized reading logic
+        else:
+            dtype_dict = (
+                {self.data_col: self.read_dtype}
+                if self.read_dtype != "float64"
+                else None
+            )
+
+            if self.format == "long":
+                usecols = [self.date_col, self.geoid_col, self.data_col]
+            else:
+                usecols = None  # need all columns to melt later
+
+            # Use chunked reading with filtering for long format when geoid_filter is provided
+            if self.format == "long" and self.geoid_filter is not None:
+                print(
+                    f"  Reading in chunks and filtering to {len(self.geoid_filter)} GEOIDs..."
+                )
+                chunks = []
+
+                # Try pyarrow engine first (faster), fall back to default C engine
+                try:
+                    csv_reader = pd.read_csv(
+                        self.filepath,
+                        dtype=dtype_dict,
+                        usecols=usecols,
+                        chunksize=1_000_000,
+                        engine="pyarrow",
+                    )
+                except (ImportError, ValueError, TypeError):
+                    # pyarrow not available or doesn't support chunksize
+                    csv_reader = pd.read_csv(
+                        self.filepath,
+                        dtype=dtype_dict,
+                        usecols=usecols,
+                        chunksize=1_000_000,
+                    )
+
+                total_before = 0
+                for chunk in csv_reader:
+                    chunk = self._apply_rename(chunk)
+                    # Format GEOID for filtering
+                    chunk[self.geoid_col] = (
+                        chunk[self.geoid_col].astype(str).str.zfill(11)
+                    )
+                    # Filter immediately - discard unwanted data early
+                    total_before += len(chunk)
+                    filtered = chunk[chunk[self.geoid_col].isin(self.geoid_filter)]
+                    if len(filtered) > 0:
+                        chunks.append(filtered)
+
+                df = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame()
+
+                # Parse dates after filtering (faster on smaller data)
+                if (
+                    self.date_col in df.columns
+                    and df[self.date_col].dtype != "datetime64[ns]"
+                ):
+                    df[self.date_col] = pd.to_datetime(
+                        df[self.date_col], errors="coerce"
+                    )
+
+                print(
+                    f"  Filtered to {len(df):,} rows ({len(self.geoid_filter)} GEOIDs) from {total_before:,} rows"
+                )
+
+                self.df = df
+            else:
+                # Original full-load path for wide format or no filtering
+                # Try pyarrow engine for speed, fall back to default
+                try:
+                    df = pd.read_csv(
+                        self.filepath,
+                        dtype=dtype_dict,
+                        usecols=usecols,
+                        parse_dates=(
+                            [self.date_col] if self.date_col in self.columns else None
+                        ),
+                        engine="pyarrow",
+                    )
+                except (ImportError, ValueError, TypeError):
+                    df = pd.read_csv(
+                        self.filepath,
+                        dtype=dtype_dict,
+                        usecols=usecols,
+                        parse_dates=(
+                            [self.date_col] if self.date_col in self.columns else None
+                        ),
+                    )
+
+                df = self._apply_rename(df)
+
+                # --- 3. Reshape if wide ---
+                if self.format == "wide" and self.expected_format == "long":
+                    df = df.melt(
+                        id_vars=[self.date_col],
+                        var_name=self.geoid_col,
+                        value_name=self.data_col,
+                    )
+
+                # --- 4. Format columns ---
+                if df[self.date_col].dtype != "datetime64[ns]":
+                    df[self.date_col] = pd.to_datetime(
+                        df[self.date_col], errors="coerce"
+                    )
+                df[self.geoid_col] = df[self.geoid_col].astype(str).str.zfill(11)
+
+                # --- 5. Filter by GEOID if provided (for wide format or non-chunked reads) ---
+                if self.geoid_filter is not None:
+                    before_count = len(df)
+                    df = df[df[self.geoid_col].isin(self.geoid_filter)]
+                    after_count = len(df)
+                    print(
+                        f"  Filtered to {after_count:,} rows ({len(self.geoid_filter)} GEOIDs) from {before_count:,} rows"
+                    )
+
+                self.df = df
+
     # ------------------------------------------------------------------
     # Helper methods
     # ------------------------------------------------------------------
@@ -262,9 +318,26 @@ class DailyMeasureData:
             return df.rename(columns=self.rename_col)
         return df
 
-    def _read_csv_header(self) -> pd.DataFrame:
+    def _read_header(self) -> pd.DataFrame:
         """Read header row and apply rename to check columns."""
-        header = pd.read_csv(self.filepath, nrows=0)
+        file_format = get_file_format(self.filepath)
+
+        if file_format == "csv":
+            header = pd.read_csv(self.filepath, nrows=0)
+        elif file_format == "stata":
+            # For Stata, we need to read the whole file but can use iterator to get columns
+            header = pd.read_stata(self.filepath, chunksize=1).__next__().iloc[:0]
+        elif file_format in ("parquet", "feather"):
+            # For Parquet/Feather, read columns only (no rows)
+            df = read_data(self.filepath)
+            header = df.iloc[:0]
+        elif file_format == "excel":
+            header = pd.read_excel(self.filepath, nrows=0)
+        else:
+            # Fallback: try to read with read_data and take no rows
+            df = read_data(self.filepath)
+            header = df.iloc[:0]
+
         return self._apply_rename(header)
 
     def __repr__(self):
@@ -438,8 +511,25 @@ class DailyMeasureDataDir:
         """
         missing = []
         for year, fpath in self.year_to_file.items():
-            # Read just the header
-            header = pd.read_csv(fpath, nrows=0)
+            # Read just the header based on file format
+            file_format = get_file_format(fpath)
+
+            if file_format == "csv":
+                header = pd.read_csv(fpath, nrows=0)
+            elif file_format == "stata":
+                # For Stata, use iterator to get columns without reading full file
+                header = pd.read_stata(fpath, chunksize=1).__next__().iloc[:0]
+            elif file_format in ("parquet", "feather"):
+                # For Parquet/Feather, we need to read (but these are fast)
+                df = read_data(fpath)
+                header = df.iloc[:0]
+            elif file_format == "excel":
+                header = pd.read_excel(fpath, nrows=0)
+            else:
+                # Fallback
+                df = read_data(fpath)
+                header = df.iloc[:0]
+
             rename_dict = self.rename_col_dict.get(year, None)
             if rename_dict:
                 header = header.rename(columns=rename_dict)

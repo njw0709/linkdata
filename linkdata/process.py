@@ -3,6 +3,7 @@ from typing import Optional, List
 import pandas as pd
 from .hrs import HRSInterviewData, HRSContextLinker
 from .daily_measure import DailyMeasureDataDir
+from .io_utils import write_data
 
 
 def compute_required_years(
@@ -194,14 +195,7 @@ def process_multiple_lags_batch(
         filename = f"{prefix}_lag_{n:04d}.{file_format}"
         temp_file = temp_dir / filename
 
-        if file_format == "parquet":
-            out_df.to_parquet(temp_file, index=False)
-        elif file_format == "feather":
-            out_df.reset_index(drop=True).to_feather(temp_file)
-        elif file_format == "csv":
-            out_df.to_csv(temp_file, index=False)
-        else:
-            raise ValueError(f"Unsupported file format: {file_format}")
+        write_data(out_df, temp_file, index=False)
 
         temp_files.append(temp_file)
         print(f"    ✓ Saved to {temp_file.name}")
@@ -434,14 +428,7 @@ def _process_single_lag_internal(
         filename = f"{prefix}_lag_{n:04d}.{file_format}"
         temp_file = temp_dir / filename
 
-        if file_format == "parquet":
-            out_df.to_parquet(temp_file, index=False)
-        elif file_format == "feather":
-            out_df.reset_index(drop=True).to_feather(temp_file)
-        elif file_format == "csv":
-            out_df.to_csv(temp_file, index=False)
-        else:
-            raise ValueError(f"Unsupported file format: {file_format}")
+        write_data(out_df, temp_file, index=False)
 
         return temp_file
 
