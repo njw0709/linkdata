@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, List
 import pandas as pd
+from tqdm import tqdm
 from .hrs import HRSInterviewData, HRSContextLinker
 from .daily_measure import DailyMeasureDataDir
 from .io_utils import write_data
@@ -180,7 +181,7 @@ def process_multiple_lags_batch(
 
     # Step 4: Process each lag using pre-computed data
     temp_files = []
-    for n in n_days:
+    for n in tqdm(n_days, desc="Processing lags", unit="lag"):
         print(f"  Processing lag {n}...")
 
         out_df = HRSContextLinker.output_merged_columns(
@@ -326,7 +327,12 @@ def process_multiple_lags_parallel(
         }
 
         # Collect results as they complete
-        for fut in as_completed(futures):
+        for fut in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="Processing lags",
+            unit="lag",
+        ):
             n = futures[fut]
             try:
                 result = fut.result()
