@@ -106,7 +106,7 @@ def main(args: argparse.Namespace):
     contextual_data_all = DailyMeasureDataDir(
         context_dir,
         measure_type=args.measure_type,
-        column_name_to_choose=args.data_col,
+        data_col=args.data_col,
     )
 
     # -------------------------------------------------------------------

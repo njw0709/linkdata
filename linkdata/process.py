@@ -171,6 +171,13 @@ def process_multiple_lags_batch(
     contextual_df = pd.concat([contextual_dir[yr].df for yr in years_to_load], axis=0)
     print(f"  Contextual data shape: {contextual_df.shape}")
 
+    # Extract metadata once to avoid repeated access to contextual_dir
+    first_year = years_to_load[0]
+    first_context = contextual_dir[first_year]
+    contextual_date_col = first_context.date_col
+    contextual_geoid_col = first_context.geoid_col
+    contextual_data_col = first_context.data_col
+
     # Step 4: Process each lag using pre-computed data
     temp_files = []
     for n in n_days:
@@ -178,11 +185,13 @@ def process_multiple_lags_batch(
 
         out_df = HRSContextLinker.output_merged_columns(
             hrs_data,
-            contextual_dir,
             n=n,
             id_col=id_col,
             precomputed_lag_df=hrs_with_lags,
             preloaded_contextual_df=contextual_df,
+            contextual_date_col=contextual_date_col,
+            contextual_geoid_col=contextual_geoid_col,
+            contextual_data_col=contextual_data_col,
             include_lag_date=include_lag_date,
             geoid_prefix=geoid_prefix,
         )
@@ -283,6 +292,13 @@ def process_multiple_lags_parallel(
     contextual_df = pd.concat([contextual_dir[yr].df for yr in years_to_load], axis=0)
     print(f"  Contextual data shape: {contextual_df.shape}")
 
+    # Extract metadata once to avoid accessing contextual_dir in threads
+    first_year = years_to_load[0]
+    first_context = contextual_dir[first_year]
+    contextual_date_col = first_context.date_col
+    contextual_geoid_col = first_context.geoid_col
+    contextual_data_col = first_context.data_col
+
     # Step 4: Process lags in parallel using threads (shares memory)
     print(f"⚡ Processing {len(n_days)} lags in parallel...")
     temp_files = []
@@ -294,7 +310,6 @@ def process_multiple_lags_parallel(
                 _process_single_lag_internal,
                 n=n,
                 hrs_data=hrs_data,
-                contextual_dir=contextual_dir,
                 id_col=id_col,
                 temp_dir=temp_dir,
                 prefix=prefix,
@@ -303,6 +318,9 @@ def process_multiple_lags_parallel(
                 geoid_prefix=geoid_prefix,
                 precomputed_lag_df=hrs_with_lags,
                 preloaded_contextual_df=contextual_df,
+                contextual_date_col=contextual_date_col,
+                contextual_geoid_col=contextual_geoid_col,
+                contextual_data_col=contextual_data_col,
             ): n
             for n in n_days
         }
@@ -324,7 +342,6 @@ def process_multiple_lags_parallel(
 def _process_single_lag_internal(
     n: int,
     hrs_data: HRSInterviewData,
-    contextual_dir: DailyMeasureDataDir,
     id_col: str,
     temp_dir: Path,
     prefix: str = "",
@@ -333,6 +350,10 @@ def _process_single_lag_internal(
     geoid_prefix: str = "LINKCEN",
     precomputed_lag_df: Optional[pd.DataFrame] = None,
     preloaded_contextual_df: Optional[pd.DataFrame] = None,
+    contextual_date_col: Optional[str] = None,
+    contextual_geoid_col: Optional[str] = None,
+    contextual_data_col: Optional[str] = None,
+    contextual_dir: Optional[DailyMeasureDataDir] = None,
 ) -> Optional[Path]:
     """
     Internal function to process a single lag.
@@ -346,8 +367,6 @@ def _process_single_lag_internal(
         Lag (in days) to process.
     hrs_data : HRSInterviewData
         HRS interview or epigenetic data object.
-    contextual_dir : DailyMeasureDataDir
-        Contextual dataset directory (e.g., daily heat, PM2.5, ozone).
     id_col : str
         Unique identifier column for joining (e.g., "hhidpn").
     temp_dir : Path
@@ -364,6 +383,14 @@ def _process_single_lag_internal(
         Pre-computed DataFrame with date and GEOID columns. If provided, skips computation.
     preloaded_contextual_df : pd.DataFrame, optional
         Pre-loaded contextual data. If provided, skips loading from contextual_dir.
+    contextual_date_col : str, optional
+        Name of date column in contextual data.
+    contextual_geoid_col : str, optional
+        Name of GEOID column in contextual data.
+    contextual_data_col : str, optional
+        Name of data column in contextual data.
+    contextual_dir : DailyMeasureDataDir, optional
+        Contextual dataset directory. Only needed if metadata columns or preloaded data not provided.
 
     Returns
     -------
@@ -376,18 +403,36 @@ def _process_single_lag_internal(
     try:
         # If pre-computed data is provided, use it directly
         if precomputed_lag_df is not None and preloaded_contextual_df is not None:
+            # Metadata should be provided when using pre-computed/pre-loaded data
+            if (
+                contextual_date_col is None
+                or contextual_geoid_col is None
+                or contextual_data_col is None
+            ):
+                raise ValueError(
+                    "When using precomputed_lag_df and preloaded_contextual_df, "
+                    "contextual_date_col, contextual_geoid_col, and contextual_data_col must be provided"
+                )
+
             out_df = HRSContextLinker.output_merged_columns(
                 hrs_data,
-                contextual_dir,
                 n=n,
                 id_col=id_col,
                 precomputed_lag_df=precomputed_lag_df,
                 preloaded_contextual_df=preloaded_contextual_df,
+                contextual_date_col=contextual_date_col,
+                contextual_geoid_col=contextual_geoid_col,
+                contextual_data_col=contextual_data_col,
                 include_lag_date=include_lag_date,
                 geoid_prefix=geoid_prefix,
             )
         else:
-            # Compute lag columns for this single lag
+            # Fallback: Compute lag columns for this single lag
+            if contextual_dir is None:
+                raise ValueError(
+                    "contextual_dir must be provided when not using precomputed data"
+                )
+
             hrs_with_lag = HRSContextLinker.prepare_lag_columns_batch(
                 hrs_data, [n], geoid_prefix
             )
@@ -409,14 +454,23 @@ def _process_single_lag_internal(
                 [contextual_dir[yr].df for yr in years_to_load], axis=0
             )
 
+            # Extract metadata
+            first_year = years_to_load[0]
+            first_context = contextual_dir[first_year]
+            date_col = first_context.date_col
+            geoid_col = first_context.geoid_col
+            data_col = first_context.data_col
+
             # Merge
             out_df = HRSContextLinker.output_merged_columns(
                 hrs_data,
-                contextual_dir,
                 n=n,
                 id_col=id_col,
                 precomputed_lag_df=hrs_with_lag,
                 preloaded_contextual_df=contextual_df,
+                contextual_date_col=date_col,
+                contextual_geoid_col=geoid_col,
+                contextual_data_col=data_col,
                 include_lag_date=include_lag_date,
                 geoid_prefix=geoid_prefix,
             )

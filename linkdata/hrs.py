@@ -352,11 +352,13 @@ class HRSContextLinker:
     @staticmethod
     def output_merged_columns(
         hrs_data: "HRSInterviewData",
-        contextual_dir: DailyMeasureDataDir,
         n: int,
         id_col: str,
         precomputed_lag_df: pd.DataFrame,
         preloaded_contextual_df: pd.DataFrame,
+        contextual_date_col: str,
+        contextual_geoid_col: str,
+        contextual_data_col: str,
         include_lag_date: bool = False,
         geoid_prefix: str = "LINKCEN",
     ) -> pd.DataFrame:
@@ -370,8 +372,6 @@ class HRSContextLinker:
         ----------
         hrs_data : HRSInterviewData
             HRS interview or epigenetic data object (used for metadata like datecol)
-        contextual_dir : DailyMeasureDataDir
-            Directory containing contextual daily measure data (used for metadata)
         n : int
             Lag period in days
         id_col : str
@@ -381,6 +381,12 @@ class HRSContextLinker:
             Should contain: id_col, {datecol}_{n}day_prior, {geoid_prefix}_{n}day_prior
         preloaded_contextual_df : pd.DataFrame
             Pre-loaded and filtered contextual data (already concatenated across years)
+        contextual_date_col : str
+            Name of date column in contextual data (e.g., 'date')
+        contextual_geoid_col : str
+            Name of GEOID column in contextual data (e.g., 'geoid')
+        contextual_data_col : str
+            Name of data/measure column in contextual data (e.g., 'tmax', 'pm25')
         include_lag_date : bool, default False
             Whether to include the lagged date column in the output
         geoid_prefix : str, default "LINKCEN"
@@ -408,10 +414,7 @@ class HRSContextLinker:
 
         # Use pre-loaded contextual data
         contextual_df = preloaded_contextual_df
-        # Get metadata from contextual_dir
-        first_year = contextual_dir.list_years()[0]
-        first_context = contextual_dir[first_year]
-        right_on = [first_context.date_col, first_context.geoid_col]
+        right_on = [contextual_date_col, contextual_geoid_col]
 
         # Merge
         merged = pd.merge(
@@ -424,9 +427,8 @@ class HRSContextLinker:
         )
 
         # Rename contextual column
-        data_col = first_context.data_col
-        new_col_name = f"{data_col}_{n_day_colname}"
-        merged.rename(columns={data_col: new_col_name}, inplace=True)
+        new_col_name = f"{contextual_data_col}_{n_day_colname}"
+        merged.rename(columns={contextual_data_col: new_col_name}, inplace=True)
 
         out_cols = [id_col]
         if include_lag_date:
