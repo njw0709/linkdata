@@ -123,6 +123,7 @@ class HRSInterviewData:
         move: bool = True,
         residential_hist: Optional[ResidentialHistoryHRS] = None,
         hhidpn: str = "hhidpn",
+        geoid_prefix: str = "LINKCEN",
     ):
         self.filename = Path(filename)
         self.df = pd.read_stata(self.filename)
@@ -133,9 +134,10 @@ class HRSInterviewData:
         self.hhidpn = hhidpn
         self.move = move
         self.residential_hist = residential_hist
+        self.geoid_prefix = geoid_prefix
 
         # Format existing GEOIDs
-        geoid_cols = [c for c in self.columns if "LINKCEN" in c]
+        geoid_cols = [c for c in self.columns if geoid_prefix in c]
         for col in geoid_cols:
             self.df[col] = self.df[col].astype(str).str.zfill(11)
 
@@ -151,8 +153,6 @@ class HRSInterviewData:
 # ---------------------------------------------------------------------
 # 3. HRSContextLinker
 # ---------------------------------------------------------------------
-from typing import Optional, List
-import pandas as pd
 
 
 class HRSContextLinker:
@@ -216,24 +216,63 @@ class HRSContextLinker:
         # Start with copy of HRS data
         result_df = hrs_data.df.copy()
 
-        # Create date and GEOID columns for each lag
+        # Collect all new columns to avoid fragmentation
+        new_columns = {}
+
+        # Create date columns for all lags
         for n in n_days:
-            # Date column
             date_colname = f"{hrs_data.datecol}_{n}day_prior"
-            result_df[date_colname] = result_df[hrs_data.datecol] - pd.to_timedelta(
+            new_columns[date_colname] = result_df[hrs_data.datecol] - pd.to_timedelta(
                 n, unit="d"
             )
 
-            # GEOID column using existing helper
-            _ = HRSContextLinker.make_geoid_day_prior(
-                hrs_data, date_colname, geoid_prefix=geoid_prefix, df=result_df
+        # Create GEOID columns for all lags using the helper method
+        for n in n_days:
+            date_colname = f"{hrs_data.datecol}_{n}day_prior"
+            n_prior_str = "_".join(date_colname.split("_")[1:])
+            geoid_colname = f"{geoid_prefix}_{n_prior_str}"
+
+            # Use helper method to compute GEOIDs
+            new_columns[geoid_colname] = HRSContextLinker._compute_geoid_for_date(
+                hrs_data, new_columns[date_colname], geoid_prefix
             )
+
+        # Concatenate all new columns at once to avoid fragmentation
+        new_cols_df = pd.DataFrame(new_columns, index=result_df.index)
+        result_df = pd.concat([result_df, new_cols_df], axis=1)
 
         return result_df
 
     # ------------------------------------------------------------------
     # 2. Geoid assignment for lag date
     # ------------------------------------------------------------------
+    @staticmethod
+    def _compute_geoid_for_date(
+        hrs_data: "HRSInterviewData",
+        date_series: pd.Series,
+        geoid_prefix: str = "LINKCEN",
+    ) -> pd.Series:
+        """
+        Compute GEOID values for a given date series.
+
+        Returns the GEOID Series without modifying any DataFrame.
+        """
+        if hrs_data.move:
+            # Use residential history for dynamic lookup
+            geoids = hrs_data.get_geoid_based_on_date(date_series)
+        else:
+            # Vectorized lookup from existing static columns
+            years = date_series.dt.year.astype(str)
+            col_names = geoid_prefix + "2010_" + years
+            col_idx = hrs_data.df.columns.get_indexer(col_names)
+            row_idx = pd.RangeIndex(len(date_series))
+            geoids = pd.Series(
+                hrs_data.df.to_numpy()[row_idx, col_idx],
+                index=date_series.index,
+                dtype="string",
+            )
+        return geoids
+
     @staticmethod
     def make_geoid_day_prior(
         hrs_data: "HRSInterviewData",
@@ -249,17 +288,11 @@ class HRSContextLinker:
         n_prior_str = "_".join(merge_date_col.split("_")[1:])
         colname = f"{geoid_prefix}_{n_prior_str}"
 
-        if hrs_data.move:
-            geoids = hrs_data.get_geoid_based_on_date(target_df[merge_date_col])
-            target_df[colname] = geoids
-        else:
-            # Vectorized lookup from existing static columns
-            years = target_df[merge_date_col].dt.year.astype(str)
-            col_names = geoid_prefix + "2010_" + years
-            col_idx = hrs_data.df.columns.get_indexer(col_names)
-            row_idx = pd.RangeIndex(len(target_df))
-            geoid_values = hrs_data.df.to_numpy()[row_idx, col_idx]
-            target_df[colname] = geoid_values
+        # Compute GEOIDs using helper method
+        geoids = HRSContextLinker._compute_geoid_for_date(
+            hrs_data, target_df[merge_date_col], geoid_prefix
+        )
+        target_df[colname] = geoids
 
         return colname
 

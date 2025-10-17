@@ -17,6 +17,7 @@ python link_lags.py \
     --measure-type heat_index \
     --data-col HeatIndex \
     --n-lags 2191 \
+    --geoid-prefix LINKCEN \
     --parallel
 
 With residential history:
@@ -39,6 +40,7 @@ python link_lags.py \
     --measure-type heat_index \
     --data-col HeatIndex \
     --n-lags 2191 \
+    --geoid-prefix LINKCEN \
     --parallel
 """
 
@@ -94,6 +96,7 @@ def main(args: argparse.Namespace):
         datecol=args.date_col,
         move=bool(residential_hist),
         residential_hist=residential_hist,
+        geoid_prefix=args.geoid_prefix,
     )
 
     # -------------------------------------------------------------------
@@ -125,6 +128,7 @@ def main(args: argparse.Namespace):
             id_col=args.id_col,
             temp_dir=temp_dir,
             prefix=args.measure_type,
+            geoid_prefix=args.geoid_prefix,
             include_lag_date=False,
             file_format="parquet",
         )
@@ -137,6 +141,7 @@ def main(args: argparse.Namespace):
             id_col=args.id_col,
             temp_dir=temp_dir,
             prefix=args.measure_type,
+            geoid_prefix=args.geoid_prefix,
             include_lag_date=False,
             file_format="parquet",
         )
@@ -260,6 +265,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--parallel", action="store_true", help="Use parallel processing"
+    )
+    parser.add_argument(
+        "--geoid-prefix",
+        default="LINKCEN",
+        help="Prefix for GEOID column names (default: LINKCEN)",
     )
     args = parser.parse_args()
 
