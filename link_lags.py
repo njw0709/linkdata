@@ -21,16 +21,13 @@ python link_lags.py \
 """
 
 import argparse
-import tempfile
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import pandas as pd
-from tqdm import tqdm
 
 from linkdata.hrs import HRSInterviewData, ResidentialHistoryHRS
 from linkdata.daily_measure import DailyMeasureDataDir
-from linkdata.process import process_single_lag
+from linkdata.process import process_multiple_lags_batch, process_multiple_lags_parallel
 
 
 # -------------------------------------------------------------------
@@ -78,56 +75,51 @@ def main(args: argparse.Namespace):
     )
 
     # -------------------------------------------------------------------
-    # ⚡ Process lags (parallel or sequential)
+    # ⚡ Process lags (parallel or batch)
     # -------------------------------------------------------------------
     temp_dir = Path(args.save_dir) / "temp_lag_files"
     temp_dir.mkdir(parents=True, exist_ok=True)
     print(f"⚡ Temporary lag files will be saved to: {temp_dir}")
 
-    temp_files = []
+    # Generate list of lags to process
+    lags_to_process = list(range(args.n_lags))
 
     if args.parallel:
-        # 🧠 Parallel processing
-        with ProcessPoolExecutor() as executor:
-            futures = {
-                executor.submit(
-                    process_single_lag,
-                    n,
-                    args.id_col,
-                    temp_dir,
-                    hrs_epi_data,
-                    contextual_data_all,
-                ): n
-                for n in range(args.n_lags)
-            }
-            for fut in tqdm(
-                as_completed(futures), total=len(futures), desc="Processing lags"
-            ):
-                result = fut.result()
-                if result is not None:
-                    temp_files.append(result)
+        print(f"🚀 Using optimized PARALLEL processing for {args.n_lags} lags")
+        temp_files = process_multiple_lags_parallel(
+            hrs_data=hrs_epi_data,
+            contextual_dir=contextual_data_all,
+            n_days=lags_to_process,
+            id_col=args.id_col,
+            temp_dir=temp_dir,
+            prefix=args.measure_type,
+            include_lag_date=False,
+            file_format="parquet",
+        )
     else:
-        # 🐢 Sequential processing
-        for n in tqdm(range(args.n_lags), desc="Processing lags"):
-            result = process_single_lag(
-                n,
-                args.id_col,
-                temp_dir,
-                hrs_epi_data,
-                contextual_data_all,
-            )
-            if result is not None:
-                temp_files.append(result)
+        print(f"🔄 Using optimized BATCH processing for {args.n_lags} lags")
+        temp_files = process_multiple_lags_batch(
+            hrs_data=hrs_epi_data,
+            contextual_dir=contextual_data_all,
+            n_days=lags_to_process,
+            id_col=args.id_col,
+            temp_dir=temp_dir,
+            prefix=args.measure_type,
+            include_lag_date=False,
+            file_format="parquet",
+        )
 
     print(f"✅ Finished processing {len(temp_files)} lag files")
 
     # -------------------------------------------------------------------
     # 🧱 Merge all lag outputs
     # -------------------------------------------------------------------
-    print("📎 Merging all lag outputs with main HRS data...")
+    print(f"📎 Merging {len(temp_files)} lag outputs with main HRS data...")
     final_df = hrs_epi_data.df.copy()
 
-    for f in tqdm(temp_files, desc="Merging parquet files"):
+    for i, f in enumerate(temp_files):
+        if (i + 1) % 100 == 0:
+            print(f"  Merged {i + 1}/{len(temp_files)} files...")
         lag_df = pd.read_parquet(f)
         final_df = final_df.merge(lag_df, on=args.id_col, how="left")
 

@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 heat_index_dir = r"C:\Users\BioDem\Documents\BioDem\Users\Nam\Linkage\data\daily_heat_mean"
 heat_data_list = [f for f in os.listdir(heat_index_dir) if f.endswith('csv')]

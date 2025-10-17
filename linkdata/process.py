@@ -297,7 +297,7 @@ def process_multiple_lags_parallel(
         # Submit all tasks
         futures = {
             executor.submit(
-                process_single_lag,
+                _process_single_lag_internal,
                 n=n,
                 hrs_data=hrs_data,
                 contextual_dir=contextual_dir,
@@ -327,7 +327,7 @@ def process_multiple_lags_parallel(
     return temp_files
 
 
-def process_single_lag(
+def _process_single_lag_internal(
     n: int,
     hrs_data: HRSInterviewData,
     contextual_dir: DailyMeasureDataDir,
@@ -341,13 +341,10 @@ def process_single_lag(
     preloaded_contextual_df: Optional[pd.DataFrame] = None,
 ) -> Optional[Path]:
     """
-    Process a single lag n for a given contextual dataset, merge with HRS data,
-    and write the resulting lagged column to a temporary file.
+    Internal function to process a single lag.
 
-    Can optionally accept pre-computed lag columns and pre-loaded contextual data
-    for efficiency when called from parallel processing.
-
-    NOTE: For processing multiple lags efficiently, use process_multiple_lags_batch instead.
+    Used internally by process_multiple_lags_parallel.
+    For external use, prefer process_multiple_lags_batch or process_multiple_lags_parallel.
 
     Parameters
     ----------

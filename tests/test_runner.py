@@ -117,9 +117,8 @@ def main():
     if success:
         print("🎉 All tests passed! The HRS fixtures are ready to use.")
         print("\nTo run pytest:")
-        print("  pytest tests/test_hrs_data.py")
-        print("  pytest tests/test_hrs_interview_data.py")
         print("  pytest tests/test_integration.py")
+        print("  pytest tests/test_end_to_end_linkage.py")
     else:
         print("❌ Some tests failed. Please check the errors above.")
         return 1
