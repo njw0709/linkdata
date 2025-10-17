@@ -138,15 +138,18 @@ def test_performance_small_dataset(
     print("=" * 80)
 
     # Verify both produce same results (allowing for row order differences)
+    # Compare specific lag file (lag 0) to ensure we're comparing the same data
+    batch_file_0 = temp_dir_batch / "heat_lag_0000.parquet"
+    parallel_file_0 = temp_dir_parallel / "heat_lag_0000.parquet"
+
+    assert batch_file_0.exists(), "Batch lag 0 file not found"
+    assert parallel_file_0.exists(), "Parallel lag 0 file not found"
+
     batch_df = (
-        pd.read_parquet(temp_files_batch[0])
-        .sort_values("hhidpn")
-        .reset_index(drop=True)
+        pd.read_parquet(batch_file_0).sort_values("hhidpn").reset_index(drop=True)
     )
     parallel_df = (
-        pd.read_parquet(temp_files_parallel[0])
-        .sort_values("hhidpn")
-        .reset_index(drop=True)
+        pd.read_parquet(parallel_file_0).sort_values("hhidpn").reset_index(drop=True)
     )
 
     # Use pandas testing utility for NaN-aware comparison
