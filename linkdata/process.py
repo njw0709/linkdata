@@ -225,6 +225,7 @@ def process_multiple_lags_parallel(
     include_lag_date: bool = False,
     file_format: str = "parquet",
     max_workers: Optional[int] = None,
+    auto_memory_limit: bool = True,
 ) -> List[Path]:
     """
     Process multiple lags with parallel processing using ThreadPoolExecutor.
@@ -253,7 +254,13 @@ def process_multiple_lags_parallel(
     file_format : {"parquet", "feather", "csv"}, default "parquet"
         File format for temporary output files
     max_workers : int, optional
-        Maximum number of worker threads. If None, uses default from ThreadPoolExecutor.
+        Maximum number of worker threads. If None and auto_memory_limit is True,
+        automatically calculates based on available memory. Otherwise uses default
+        from ThreadPoolExecutor.
+    auto_memory_limit : bool, default True
+        If True and max_workers is None, automatically calculate max_workers
+        based on available system memory to prevent OOM errors. Assumes ~2GB
+        per worker thread as a conservative estimate.
 
     Returns
     -------
@@ -262,6 +269,7 @@ def process_multiple_lags_parallel(
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     from .hrs import HRSContextLinker
+    import os
 
     print(f"\n🚀 Starting parallel processing for {len(n_days)} lags...")
 
@@ -299,6 +307,51 @@ def process_multiple_lags_parallel(
     contextual_date_col = first_context.date_col
     contextual_geoid_col = first_context.geoid_col
     contextual_data_col = first_context.data_col
+
+    # Auto-calculate max_workers based on available memory if not specified
+    if max_workers is None and auto_memory_limit:
+        try:
+            import psutil
+
+            # Get available memory in GB
+            mem = psutil.virtual_memory()
+            available_gb = mem.available / (1024**3)
+
+            # Calculate shared data size
+            hrs_size_mb = hrs_with_lags.memory_usage(deep=True).sum() / (1024 * 1024)
+            ctx_size_mb = contextual_df.memory_usage(deep=True).sum() / (1024 * 1024)
+            shared_size_gb = (hrs_size_mb + ctx_size_mb) / 1024
+
+            # Conservative estimate: 2GB per worker + shared data
+            # Use 70% of available memory as safety margin
+            usable_gb = (available_gb * 0.7) - shared_size_gb
+            gb_per_worker = 2.0
+
+            if usable_gb > gb_per_worker:
+                max_workers_by_memory = int(usable_gb / gb_per_worker)
+                max_workers_by_cpu = os.cpu_count() or 1
+                max_workers = max(1, min(max_workers_by_memory, max_workers_by_cpu))
+
+                print(f"🧮 Memory-aware worker calculation:")
+                print(f"   Available memory: {available_gb:.1f} GB")
+                print(f"   Shared data: {shared_size_gb:.1f} GB")
+                print(f"   Usable for workers: {usable_gb:.1f} GB")
+                print(f"   Max workers (memory): {max_workers_by_memory}")
+                print(f"   Max workers (CPU): {max_workers_by_cpu}")
+                print(f"   Selected max_workers: {max_workers}")
+            else:
+                max_workers = 1
+                print(
+                    f"⚠️  Limited memory available ({available_gb:.1f} GB), using max_workers=1"
+                )
+
+        except ImportError:
+            print("⚠️  psutil not available, using default max_workers")
+            max_workers = None
+        except Exception as e:
+            print(f"⚠️  Error calculating memory-based max_workers: {e}")
+            print("   Falling back to default max_workers")
+            max_workers = None
 
     # Step 4: Process lags in parallel using threads (shares memory)
     print(f"⚡ Processing {len(n_days)} lags in parallel...")
