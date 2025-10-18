@@ -410,6 +410,7 @@ class HRSContextLinker:
             out_cols = [id_col]
             if include_lag_date:
                 out_cols.append(n_day_colname)
+                out_cols.append(n_day_geoid_colname)
             return hrs_copy[out_cols]
 
         # Use pre-loaded contextual data
@@ -433,6 +434,7 @@ class HRSContextLinker:
         out_cols = [id_col]
         if include_lag_date:
             out_cols.append(n_day_colname)
+            out_cols.append(n_day_geoid_colname)
         out_cols.append(new_col_name)
 
         return merged[out_cols]
