@@ -65,6 +65,7 @@ cmd = [
     str(residential_hist_filename),
     "--n-lags",
     str(n_lags),
+    "--include_lag_date",
 ]
 
 if use_parallel:

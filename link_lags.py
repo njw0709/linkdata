@@ -129,7 +129,7 @@ def main(args: argparse.Namespace):
             temp_dir=temp_dir,
             prefix=args.measure_type,
             geoid_prefix=args.geoid_prefix,
-            include_lag_date=False,
+            include_lag_date=args.include_lag_date,
             file_format="parquet",
         )
     else:
@@ -142,7 +142,7 @@ def main(args: argparse.Namespace):
             temp_dir=temp_dir,
             prefix=args.measure_type,
             geoid_prefix=args.geoid_prefix,
-            include_lag_date=False,
+            include_lag_date=args.include_lag_date,
             file_format="parquet",
         )
 
@@ -273,6 +273,11 @@ if __name__ == "__main__":
         "--geoid-prefix",
         default="LINKCEN",
         help="Prefix for GEOID column names (default: LINKCEN)",
+    )
+    parser.add_argument(
+        "--include-lag-date",
+        action="store_true",
+        help="Include lag date columns in the output (default: False)",
     )
     args = parser.parse_args()
 

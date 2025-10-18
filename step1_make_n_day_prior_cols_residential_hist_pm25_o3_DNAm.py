@@ -110,6 +110,7 @@ cmd_o3 = [
     str(residential_hist_path),
     "--n-lags",
     str(n_lags),
+    "--include_lag_date",
 ]
 
 if use_parallel:
