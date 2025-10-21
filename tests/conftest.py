@@ -5,6 +5,13 @@ This module provides common fixtures that can be used across multiple test modul
 All fixtures are session-scoped for efficiency.
 """
 
+import os
+import sys
+
+# Set Qt platform to offscreen in headless environments BEFORE importing PyQt
+if sys.platform == "linux" and "DISPLAY" not in os.environ:
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
 import pytest
 from pathlib import Path
 from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData

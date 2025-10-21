@@ -1,7 +1,7 @@
 [project]
 name = "linkage"
 version = "0.1.0"
-description = "Add your description here"
+description = "HRS Linkage Tool - Link lagged contextual data to HRS survey data"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -9,11 +9,26 @@ dependencies = [
     "pandas>=2.3.3",
     "psutil>=6.1.0",
     "pyarrow>=21.0.0",
+    "pyqt6>=6.9.1",
     "pytest>=8.4.2",
     "tqdm>=4.67.1",
 ]
 
+[project.scripts]
+linkage-cli = "link_lags:main"
+linkage-gui = "gui_app:main"
+
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+# For GUI tests in headless environments, set: QT_QPA_PLATFORM=offscreen
+env = [
+    "QT_QPA_PLATFORM=offscreen",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-env>=1.1.5",
+    "pytest-qt>=4.5.0",
 ]

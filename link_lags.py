@@ -61,7 +61,7 @@ from linkdata.process import process_multiple_lags_batch, process_multiple_lags_
 # -------------------------------------------------------------------
 # 🚀 Main pipeline
 # -------------------------------------------------------------------
-def main(args: argparse.Namespace):
+def run_pipeline(args: argparse.Namespace):
     hrs_path = Path(args.hrs_data)
     context_dir = Path(args.context_dir)
     out_path = Path(args.save_dir) / Path(args.output_name)
@@ -180,7 +180,8 @@ def main(args: argparse.Namespace):
 # -------------------------------------------------------------------
 # 📝 CLI
 # -------------------------------------------------------------------
-if __name__ == "__main__":
+def _create_parser() -> argparse.ArgumentParser:
+    """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
         description="Link daily contextual data to HRS dataset with n-day lags."
     )
@@ -294,6 +295,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Include lag date columns in the output (default: False)",
     )
-    args = parser.parse_args()
+    return parser
 
-    main(args)
+
+def main():
+    """Entry point for script execution."""
+    parser = _create_parser()
+    args = parser.parse_args()
+    run_pipeline(args)
+
+
+if __name__ == "__main__":
+    main()
