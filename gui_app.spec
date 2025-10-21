@@ -40,6 +40,33 @@ datas = [
     (os.path.join(qt_plugins_path, 'styles'), 'PyQt6/Qt6/plugins/styles'),
 ]
 
+# Function to filter out problematic Qt plugins on macOS
+def filter_binaries(binaries):
+    """Remove problematic Qt plugins that cause crashes on macOS."""
+    if sys.platform != 'darwin':
+        return binaries
+    
+    excluded_patterns = [
+        'libqdarwinpermission',  # Permission plugins (location, camera, etc.)
+        'QtLocation',
+        'QtPositioning',
+        'QtBluetooth',
+        'QtNfc',
+    ]
+    
+    filtered = []
+    for dest, source, kind in binaries:
+        exclude = False
+        for pattern in excluded_patterns:
+            if pattern in source or pattern in dest:
+                print(f"Excluding binary: {dest} ({source})")
+                exclude = True
+                break
+        if not exclude:
+            filtered.append((dest, source, kind))
+    
+    return filtered
+
 a = Analysis(
     ['gui_app.py'],
     pathex=[],
@@ -57,12 +84,17 @@ a = Analysis(
         # Exclude Qt plugins that cause crashes on macOS
         'PyQt6.QtPositioning',
         'PyQt6.QtLocation',
+        'PyQt6.QtBluetooth',
+        'PyQt6.QtNfc',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Filter out problematic binaries on macOS
+a.binaries = filter_binaries(a.binaries)
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

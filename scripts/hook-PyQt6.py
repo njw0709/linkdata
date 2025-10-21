@@ -20,6 +20,13 @@ if sys.platform == "darwin":
     # Prevent Qt from loading problematic plugins on macOS
     os.environ["QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM"] = "1"
 
+    # Disable Qt permission plugins that cause crashes
+    os.environ["QT_MAC_WANTS_LAYER"] = "1"
+
+    # Prevent Qt from trying to access location services
+    # This prevents the crash in warmUpLocationServices()
+    os.environ["QT_LOGGING_RULES"] = "qt.permissions*=false"
+
 elif sys.platform == "win32":
     # Enable DPI awareness on Windows for high-resolution displays
     try:
