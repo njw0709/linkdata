@@ -14,7 +14,7 @@ A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5
 
 ### Quick Start (Standalone Application)
 
-**Latest Version:** v0.2.0
+**Latest Version:** v0.2.1
 
 Download the pre-built standalone application for your platform:
 
