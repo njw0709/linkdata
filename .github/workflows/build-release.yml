@@ -89,6 +89,8 @@ jobs:
     name: Create GitHub Release
     needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
+    outputs:
+      release_data: ${{ steps.create_release.outputs.release_data }}
     
     steps:
       - name: Checkout code
@@ -111,6 +113,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       
       - name: Create Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
@@ -122,4 +125,52 @@ jobs:
             ./artifacts/HRSLinkageTool-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-readme:
+    name: Update README with Download Links
+    needs: create-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Get latest release info
+        id: release
+        run: |
+          RELEASE_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+          echo "release_data<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_DATA" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Update README with download links
+        run: |
+          python scripts/update_readme.py '${{ steps.release.outputs.release_data }}'
+      
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet README.md; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit and push updated README
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: Update download links for release ${{ github.ref_name }}"
+          git push
 

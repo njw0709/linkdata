@@ -47,17 +47,24 @@ The GitHub Actions workflow will automatically:
 2. Build Windows application (HRSLinkageTool.exe)
 3. Create a GitHub Release with both builds attached
 4. Generate release notes from your tag message
+5. Update README.md with the latest version and download links
+6. Commit the updated README back to the main branch
 
 You can monitor the build progress at:
-`https://github.com/YOUR_USERNAME/linkage/actions`
+`https://github.com/njw0709/linkdata/actions`
 
-### 5. Download Links Work Automatically
+### 5. Download Links Update Automatically
 
-The README.md already contains links that automatically point to the latest release:
-- macOS: `https://github.com/YOUR_USERNAME/linkage/releases/latest/download/HRSLinkageTool-macOS.zip`
-- Windows: `https://github.com/YOUR_USERNAME/linkage/releases/latest/download/HRSLinkageTool-Windows.zip`
+After each release, the workflow automatically:
+- Updates the README.md with the latest version number
+- Ensures download links point to the correct repository
+- Commits the changes back to the main branch
 
-These will always download the most recent release.
+The README will display:
+- Latest Version: (e.g., v0.2.0)
+- Download links that always point to `/latest/` release:
+  - macOS: `https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS.zip`
+  - Windows: `https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip`
 
 ## Testing Locally Before Release
 
@@ -159,14 +166,19 @@ Before creating your first release (v0.1.0):
 - [ ] Update README with your actual GitHub username/repo name
 - [ ] Create and push the v0.1.0 tag
 
-## Updating README Links
+## Automatic README Updates
 
-The README already contains the download links, but you need to update the GitHub username/repo:
+The workflow automatically updates the README after each release. The `scripts/update_readme.py` script:
 
-In `README.md`, replace `namj/linkage` with your actual `username/repository`:
+1. Extracts release information from the GitHub API
+2. Updates download links to ensure they point to `njw0709/linkdata`
+3. Adds/updates the **Latest Version** badge
+4. Commits changes back to the main branch
 
-```markdown
-- **macOS**: [Download HRSLinkageTool-macOS.zip](https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest/download/HRSLinkageTool-macOS.zip)
-- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest/download/HRSLinkageTool-Windows.zip)
-```
+This ensures the README always reflects:
+- The current repository location
+- The latest version number
+- Working download links
+
+**Note:** If you fork this repository, the script will automatically update the links to point to your fork after the first release.
 
