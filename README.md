@@ -14,6 +14,8 @@ A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5
 
 ### Quick Start (Standalone Application)
 
+**Latest Version:** v0.1.1
+
 Download the pre-built standalone application for your platform:
 
 - **macOS (Apple Silicon/M1/M2/M3)**: [Download HRSLinkageTool-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS-ARM.zip)
@@ -26,6 +28,7 @@ Download the pre-built standalone application for your platform:
   - **First-time users**: Right-click the app and select "Open" to bypass macOS Gatekeeper (app is unsigned)
   - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/HRSLinkageTool.app`
 
+- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
 - **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
   - Extract the ZIP file and run `HRSLinkageTool.exe`
   - If Windows Defender SmartScreen warns about the app, click "More info" → "Run anyway"
