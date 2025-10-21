@@ -1,0 +1,125 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS Application
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install pyinstaller
+      
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller gui_app.spec
+      
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          zip -r HRSLinkageTool-macOS.zip HRSLinkageTool.app
+      
+      - name: Upload macOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: dist/HRSLinkageTool-macOS.zip
+          retention-days: 5
+
+  build-windows:
+    name: Build Windows Application
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install pyinstaller
+      
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller gui_app.spec
+      
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          Compress-Archive -Path HRSLinkageTool -DestinationPath HRSLinkageTool-Windows.zip
+        shell: pwsh
+      
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/HRSLinkageTool-Windows.zip
+          retention-days: 5
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: ./artifacts
+      
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: ./artifacts
+      
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ./artifacts/HRSLinkageTool-macOS.zip
+            ./artifacts/HRSLinkageTool-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
