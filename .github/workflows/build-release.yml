@@ -10,9 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  build-macos:
-    name: Build macOS Application
-    runs-on: macos-latest
+  build-macos-arm:
+    name: Build macOS ARM Application
+    runs-on: macos-latest  # ARM64 (Apple Silicon)
     
     steps:
       - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync
-          uv pip install pyinstaller
+          uv pip install pyinstaller==6.3.0
       
       - name: Build with PyInstaller
         run: |
@@ -38,13 +38,50 @@ jobs:
       - name: Create ZIP archive
         run: |
           cd dist
-          zip -r HRSLinkageTool-macOS.zip HRSLinkageTool.app
+          zip -r HRSLinkageTool-macOS-ARM.zip HRSLinkageTool.app
       
-      - name: Upload macOS build artifact
+      - name: Upload macOS ARM build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: dist/HRSLinkageTool-macOS.zip
+          name: macos-arm-build
+          path: dist/HRSLinkageTool-macOS-ARM.zip
+          retention-days: 5
+
+  build-macos-intel:
+    name: Build macOS Intel Application
+    runs-on: macos-13  # Intel x86_64
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install pyinstaller==6.3.0
+      
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller gui_app.spec
+      
+      - name: Create ZIP archive
+        run: |
+          cd dist
+          zip -r HRSLinkageTool-macOS-Intel.zip HRSLinkageTool.app
+      
+      - name: Upload macOS Intel build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-intel-build
+          path: dist/HRSLinkageTool-macOS-Intel.zip
           retention-days: 5
 
   build-windows:
@@ -66,7 +103,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync
-          uv pip install pyinstaller
+          uv pip install pyinstaller==6.3.0
       
       - name: Build with PyInstaller
         run: |
@@ -87,7 +124,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-macos, build-windows]
+    needs: [build-macos-arm, build-macos-intel, build-windows]
     runs-on: ubuntu-latest
     outputs:
       release_data: ${{ steps.create_release.outputs.release_data }}
@@ -96,10 +133,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Download macOS build
+      - name: Download macOS ARM build
         uses: actions/download-artifact@v4
         with:
-          name: macos-build
+          name: macos-arm-build
+          path: ./artifacts
+      
+      - name: Download macOS Intel build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-intel-build
           path: ./artifacts
       
       - name: Download Windows build
@@ -121,7 +164,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            ./artifacts/HRSLinkageTool-macOS.zip
+            ./artifacts/HRSLinkageTool-macOS-ARM.zip
+            ./artifacts/HRSLinkageTool-macOS-Intel.zip
             ./artifacts/HRSLinkageTool-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

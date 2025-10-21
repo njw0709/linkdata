@@ -16,13 +16,24 @@ A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5
 
 Download the pre-built standalone application for your platform:
 
-- **macOS**: [Download HRSLinkageTool-macOS.zip](https://github.com/namj/linkage/releases/latest/download/HRSLinkageTool-macOS.zip)
+- **macOS (Apple Silicon/M1/M2/M3)**: [Download HRSLinkageTool-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS-ARM.zip)
   - Extract the ZIP file and run `HRSLinkageTool.app`
   - **First-time users**: Right-click the app and select "Open" to bypass macOS Gatekeeper (app is unsigned)
+  - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/HRSLinkageTool.app`
 
-- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/namj/linkage/releases/latest/download/HRSLinkageTool-Windows.zip)
+- **macOS (Intel)**: [Download HRSLinkageTool-macOS-Intel.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS-Intel.zip)
+  - Extract the ZIP file and run `HRSLinkageTool.app`
+  - **First-time users**: Right-click the app and select "Open" to bypass macOS Gatekeeper (app is unsigned)
+  - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/HRSLinkageTool.app`
+
+- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
   - Extract the ZIP file and run `HRSLinkageTool.exe`
-  - If Windows Defender warns about the app, click "More info" → "Run anyway" (common with PyInstaller builds)
+  - If Windows Defender SmartScreen warns about the app, click "More info" → "Run anyway"
+  - Note: Unsigned apps may trigger antivirus warnings (false positive)
+
+**Troubleshooting**: If the app fails to start, check the error log file:
+- **macOS/Linux**: `~/.hrs-linkage-tool.log`
+- **Windows**: `C:\Users\YourUsername\.hrs-linkage-tool.log`
 
 ### Build from Source
 

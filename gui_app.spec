@@ -7,7 +7,9 @@ PyQt6-based GUI application.
 """
 
 import sys
+import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyQt6 import QtCore
 
 block_cipher = None
 
@@ -30,8 +32,13 @@ hidden_imports = [
     'PyQt6.QtWidgets',
 ] + linkdata_submodules
 
-# Collect data files if any (adjust if you have data files to bundle)
-datas = []
+# Collect Qt plugins - required for all platforms
+# These plugins are essential for Qt to function properly
+qt_plugins_path = os.path.join(os.path.dirname(QtCore.__file__), 'Qt6', 'plugins')
+datas = [
+    (os.path.join(qt_plugins_path, 'platforms'), 'PyQt6/Qt6/plugins/platforms'),
+    (os.path.join(qt_plugins_path, 'styles'), 'PyQt6/Qt6/plugins/styles'),
+]
 
 a = Analysis(
     ['gui_app.py'],
@@ -41,12 +48,15 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['scripts/hook-PyQt6.py'],
     excludes=[
         'matplotlib',
         'scipy',
         'numpy.distutils',
         'tkinter',
+        # Exclude Qt plugins that cause crashes on macOS
+        'PyQt6.QtPositioning',
+        'PyQt6.QtLocation',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -65,7 +75,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # Disabled: UPX can corrupt Qt DLLs and trigger antivirus false positives
     console=False,  # Set to False for GUI app (no console window)
     disable_windowed_traceback=False,
     target_arch=None,
@@ -79,7 +89,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,  # Disabled: UPX can corrupt Qt DLLs and trigger antivirus false positives
     upx_exclude=[],
     name='HRSLinkageTool',
 )
@@ -97,6 +107,11 @@ if sys.platform == 'darwin':
             'CFBundleVersion': '0.1.0',
             'CFBundleShortVersionString': '0.1.0',
             'NSHighResolutionCapable': 'True',
+            # Privacy keys to prevent Qt from accessing unnecessary services
+            'NSLocationWhenInUseUsageDescription': 'This app does not use location services.',
+            'NSLocationAlwaysAndWhenInUseUsageDescription': 'This app does not use location services.',
+            'NSCameraUsageDescription': 'This app does not use the camera.',
+            'NSMicrophoneUsageDescription': 'This app does not use the microphone.',
         },
     )
 

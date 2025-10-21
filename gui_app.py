@@ -11,26 +11,84 @@ Usage:
     uv run python gui_app.py
 """
 import sys
+import os
+import traceback
+from pathlib import Path
+from datetime import datetime
 
 from PyQt6.QtWidgets import QApplication
 
 from linkdata.gui.main_window import LinkageWizard
 
 
+def get_log_file():
+    """Get the error log file path from environment or use default."""
+    log_path = os.environ.get("HRS_LINKAGE_LOG_FILE")
+    if log_path:
+        return Path(log_path)
+    return Path.home() / ".hrs-linkage-tool.log"
+
+
+def log_error(error_msg, exception=None):
+    """Write error to log file for debugging startup issues."""
+    try:
+        log_file = get_log_file()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*70}\n")
+            f.write(f"[{timestamp}] HRS Linkage Tool Error\n")
+            f.write(f"{'='*70}\n")
+            f.write(f"{error_msg}\n")
+
+            if exception:
+                f.write("\nTraceback:\n")
+                f.write(traceback.format_exc())
+
+            f.write(f"{'='*70}\n")
+    except Exception:
+        # If we can't write to log, silently fail (app is already broken)
+        pass
+
+
 def main():
     """Launch the HRS Linkage Tool GUI."""
-    app = QApplication(sys.argv)
+    try:
+        app = QApplication(sys.argv)
 
-    # Set application metadata
-    app.setApplicationName("HRS Linkage Tool")
-    app.setOrganizationName("HRS Research")
+        # Set application metadata
+        app.setApplicationName("HRS Linkage Tool")
+        app.setOrganizationName("HRS Research")
 
-    # Create and show wizard
-    wizard = LinkageWizard()
-    wizard.show()
+        # Create and show wizard
+        wizard = LinkageWizard()
+        wizard.show()
 
-    # Run application
-    sys.exit(app.exec())
+        # Run application
+        sys.exit(app.exec())
+
+    except Exception as e:
+        error_msg = f"Failed to start HRS Linkage Tool GUI: {str(e)}"
+        log_error(error_msg, exception=e)
+
+        # Try to show error dialog if Qt is available
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Icon.Critical)
+            msg.setWindowTitle("Startup Error")
+            msg.setText("HRS Linkage Tool failed to start")
+            msg.setInformativeText(
+                f"{error_msg}\n\nSee log file for details:\n{get_log_file()}"
+            )
+            msg.exec()
+        except Exception:
+            # If Qt dialog fails, write to stderr
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            print(f"See log file: {get_log_file()}", file=sys.stderr)
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":
