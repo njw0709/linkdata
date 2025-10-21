@@ -8,7 +8,7 @@ PyQt6-based GUI application.
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all
+from PyInstaller.utils.hooks import collect_submodules
 from PyQt6 import QtCore
 
 block_cipher = None
@@ -16,20 +16,21 @@ block_cipher = None
 # Collect all submodules from critical packages
 linkdata_submodules = collect_submodules('linkdata')
 
-# Collect all pandas and numpy components (they have complex internal structure)
-pandas_datas, pandas_binaries, pandas_hiddenimports = collect_all('pandas')
-numpy_datas, numpy_binaries, numpy_hiddenimports = collect_all('numpy')
-
-# Additional hidden imports for PyQt6 and other packages
+# Additional hidden imports - let PyInstaller's hooks handle pandas/numpy automatically
 hidden_imports = [
+    # Core data processing
+    'pandas',
+    'numpy',
     'openpyxl',
+    'pyarrow',
+    # Utilities
     'psutil',
     'tqdm',
-    'pyarrow',
+    # PyQt6
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
-] + linkdata_submodules + pandas_hiddenimports + numpy_hiddenimports
+] + linkdata_submodules
 
 # Collect Qt plugins - required for all platforms
 # These plugins are essential for Qt to function properly
@@ -37,7 +38,7 @@ qt_plugins_path = os.path.join(os.path.dirname(QtCore.__file__), 'Qt6', 'plugins
 datas = [
     (os.path.join(qt_plugins_path, 'platforms'), 'PyQt6/Qt6/plugins/platforms'),
     (os.path.join(qt_plugins_path, 'styles'), 'PyQt6/Qt6/plugins/styles'),
-] + pandas_datas + numpy_datas
+]
 
 # Function to filter out problematic Qt plugins on macOS
 def filter_binaries(binaries):
@@ -69,7 +70,7 @@ def filter_binaries(binaries):
 a = Analysis(
     ['gui_app.py'],
     pathex=[],
-    binaries=pandas_binaries + numpy_binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
@@ -79,6 +80,7 @@ a = Analysis(
         'matplotlib',
         'scipy',
         'tkinter',
+        'pytest',  # Exclude pytest to avoid the f2py.tests warning
         # Exclude Qt plugins that cause crashes on macOS
         'PyQt6.QtPositioning',
         'PyQt6.QtLocation',
