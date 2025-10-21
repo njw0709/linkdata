@@ -2,8 +2,7 @@
 Pipeline execution page.
 """
 
-import sys
-import subprocess
+import argparse
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -19,53 +18,39 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 
+from linkdata.process import run_pipeline
+
 
 class PipelineRunner(QThread):
-    """Thread for running the pipeline CLI command."""
+    """Thread for running the pipeline function."""
 
     output = pyqtSignal(str)  # Emits output lines
     finished_signal = pyqtSignal(bool, str)  # success, message
 
-    def __init__(self, command: list):
+    def __init__(self, args: argparse.Namespace):
         super().__init__()
-        self.command = command
-        self.process = None
+        self.args = args
 
     def run(self):
-        """Run the pipeline command."""
+        """Run the pipeline function."""
         try:
-            self.process = subprocess.Popen(
-                self.command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True,
+            self.output.emit("Starting pipeline execution...")
+            self.output.emit(f"HRS data: {self.args.hrs_data}")
+            self.output.emit(f"Context directory: {self.args.context_dir}")
+            self.output.emit(f"Output: {self.args.save_dir}/{self.args.output_name}")
+            self.output.emit(f"Number of lags: {self.args.n_lags}")
+            self.output.emit(
+                f"Processing mode: {'Parallel' if self.args.parallel else 'Batch'}"
             )
+            self.output.emit("")
 
-            # Stream output
-            for line in iter(self.process.stdout.readline, ""):
-                if line:
-                    self.output.emit(line.rstrip())
+            # Call the pipeline function directly
+            run_pipeline(self.args)
 
-            # Wait for completion
-            return_code = self.process.wait()
-
-            if return_code == 0:
-                self.finished_signal.emit(True, "Pipeline completed successfully!")
-            else:
-                self.finished_signal.emit(
-                    False, f"Pipeline failed with exit code {return_code}"
-                )
+            self.finished_signal.emit(True, "Pipeline completed successfully!")
 
         except Exception as e:
             self.finished_signal.emit(False, f"Error running pipeline: {str(e)}")
-
-    def stop(self):
-        """Stop the running process."""
-        if self.process:
-            self.process.terminate()
-            self.process.wait()
 
 
 class ExecutionPage(QWizardPage):
@@ -134,83 +119,48 @@ class ExecutionPage(QWizardPage):
 
         self.setLayout(layout)
 
-    def _build_command(self) -> list:
-        """Build the CLI command from wizard fields."""
+    def _build_args(self) -> argparse.Namespace:
+        """Build pipeline arguments from wizard fields."""
         wizard = self.wizard()
         if not wizard:
-            return []
+            return argparse.Namespace()
 
-        # Get the path to link_lags.py (in the same directory as this package)
-        gui_dir = Path(__file__).parent.parent
-        linkdata_dir = gui_dir.parent
-        project_dir = linkdata_dir.parent
-        link_lags_script = project_dir / "link_lags.py"
-
-        command = [
-            sys.executable,
-            str(link_lags_script),
-            "--hrs-data",
-            wizard.field("hrs_data_path"),
-            "--context-dir",
-            wizard.field("context_dir"),
-            "--output_name",
-            wizard.field("output_name"),
-            "--id-col",
-            wizard.field("id_col"),
-            "--date-col",
-            wizard.field("date_col"),
-            "--measure-type",
-            wizard.field("measure_type"),
-            "--save-dir",
-            wizard.field("save_dir"),
-            "--data-col",
-            wizard.field("data_col"),
-            "--geoid-col",
-            wizard.field("geoid_col"),
-            "--n-lags",
-            str(wizard.field("n_lags")),
-            "--geoid-prefix",
-            wizard.field("geoid_prefix"),
-        ]
+        # Build arguments namespace
+        args = argparse.Namespace(
+            hrs_data=wizard.field("hrs_data_path"),
+            context_dir=wizard.field("context_dir"),
+            output_name=wizard.field("output_name"),
+            id_col=wizard.field("id_col"),
+            date_col=wizard.field("date_col"),
+            measure_type=wizard.field("measure_type"),
+            save_dir=wizard.field("save_dir"),
+            data_col=wizard.field("data_col"),
+            geoid_col=wizard.field("geoid_col"),
+            n_lags=wizard.field("n_lags"),
+            geoid_prefix=wizard.field("geoid_prefix"),
+            parallel=wizard.field("parallel"),
+            include_lag_date=wizard.field("include_lag_date"),
+        )
 
         # Optional: file extension
         file_ext = wizard.field("file_extension")
-        if file_ext != "Auto-detect":
-            command.extend(["--file-extension", file_ext])
+        args.file_extension = file_ext if file_ext != "Auto-detect" else None
 
         # Optional: residential history
         if wizard.field("use_residential_hist"):
-            command.extend(
-                [
-                    "--residential-hist",
-                    wizard.field("residential_hist_path"),
-                    "--res-hist-hhidpn",
-                    wizard.field("res_hist_hhidpn"),
-                    "--res-hist-movecol",
-                    wizard.field("res_hist_movecol"),
-                    "--res-hist-mvyear",
-                    wizard.field("res_hist_mvyear"),
-                    "--res-hist-mvmonth",
-                    wizard.field("res_hist_mvmonth"),
-                    "--res-hist-moved-mark",
-                    wizard.field("res_hist_moved_mark"),
-                    "--res-hist-geoid",
-                    wizard.field("res_hist_geoid"),
-                    "--res-hist-survey-yr-col",
-                    wizard.field("res_hist_survey_yr_col"),
-                    "--res-hist-first-tract-mark",
-                    str(wizard.field("res_hist_first_tract_mark")),
-                ]
-            )
+            args.residential_hist = wizard.field("residential_hist_path")
+            args.res_hist_hhidpn = wizard.field("res_hist_hhidpn")
+            args.res_hist_movecol = wizard.field("res_hist_movecol")
+            args.res_hist_mvyear = wizard.field("res_hist_mvyear")
+            args.res_hist_mvmonth = wizard.field("res_hist_mvmonth")
+            args.res_hist_moved_mark = wizard.field("res_hist_moved_mark")
+            args.res_hist_geoid = wizard.field("res_hist_geoid")
+            args.res_hist_survey_yr_col = wizard.field("res_hist_survey_yr_col")
+            args.res_hist_first_tract_mark = wizard.field("res_hist_first_tract_mark")
+        else:
+            args.residential_hist = None
 
-        # Flags
-        if wizard.field("parallel"):
-            command.append("--parallel")
-
-        if wizard.field("include_lag_date"):
-            command.append("--include-lag-date")
-
-        return command
+        return args
 
     def _run_pipeline(self):
         """Start the pipeline execution."""
@@ -222,14 +172,12 @@ class ExecutionPage(QWizardPage):
             )
             return
 
-        # Build command
-        command = self._build_command()
+        # Build arguments
+        args = self._build_args()
 
-        # Show command in output
+        # Show configuration in output
         self.output_text.clear()
-        self.output_text.append("=== Command ===")
-        self.output_text.append(" ".join(command))
-        self.output_text.append("\n=== Output ===")
+        self.output_text.append("=== Pipeline Configuration ===")
 
         # Update UI
         self.pipeline_running = True
@@ -239,7 +187,7 @@ class ExecutionPage(QWizardPage):
         self.status_label.setText("Running pipeline...")
 
         # Start runner thread
-        self.runner_thread = PipelineRunner(command)
+        self.runner_thread = PipelineRunner(args)
         self.runner_thread.output.connect(self._on_output)
         self.runner_thread.finished_signal.connect(self._on_finished)
         self.runner_thread.start()

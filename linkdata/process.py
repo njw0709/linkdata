@@ -1,8 +1,9 @@
 from pathlib import Path
 from typing import Optional, List
+import argparse
 import pandas as pd
 from tqdm import tqdm
-from .hrs import HRSInterviewData, HRSContextLinker
+from .hrs import HRSInterviewData, HRSContextLinker, ResidentialHistoryHRS
 from .daily_measure import DailyMeasureDataDir
 from .io_utils import write_data
 
@@ -142,7 +143,6 @@ def process_multiple_lags_batch(
     List[Path]
         List of paths to temporary files created for each lag
     """
-    from .hrs import HRSContextLinker
 
     print(f"\n🔄 Starting batch processing for {len(n_days)} lags...")
 
@@ -457,8 +457,6 @@ def _process_single_lag_internal(
         Path to the written temporary file, or None if no data was produced
         (e.g., if all geoid values were NA for this lag).
     """
-    from .hrs import HRSContextLinker
-
     try:
         # If pre-computed data is provided, use it directly
         if precomputed_lag_df is not None and preloaded_contextual_df is not None:
@@ -548,3 +546,139 @@ def _process_single_lag_internal(
     except Exception as e:
         print(f"❌ Error processing lag {n} ({prefix}): {e}")
         return None
+
+
+def run_pipeline(args: argparse.Namespace):
+    """
+    Run the complete lagged contextual data linkage pipeline.
+
+    This function orchestrates the entire linkage process:
+    1. Load HRS interview/epigenetic data
+    2. Load residential history (if provided)
+    3. Load contextual daily measure data
+    4. Process lags (parallel or batch)
+    5. Merge all lag outputs
+    6. Save final dataset
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Arguments containing all pipeline configuration:
+        - hrs_data: Path to HRS Stata file
+        - context_dir: Directory containing contextual data files
+        - output_name: Output file name
+        - save_dir: Directory to save output and temp files
+        - id_col: Unique identifier column
+        - date_col: Interview date column
+        - measure_type: Measurement type (e.g., heat_index, pm25)
+        - data_col: Data column name in contextual files
+        - geoid_col: GEOID column name in contextual files
+        - geoid_prefix: Prefix for GEOID columns (default: LINKCEN)
+        - n_lags: Number of lags to process
+        - file_extension: File extension for contextual files (optional)
+        - parallel: Whether to use parallel processing
+        - include_lag_date: Whether to include lag date columns
+        - residential_hist: Path to residential history file (optional)
+        - res_hist_*: Residential history configuration parameters
+    """
+    hrs_path = Path(args.hrs_data)
+    context_dir = Path(args.context_dir)
+    out_path = Path(args.save_dir) / Path(args.output_name)
+
+    if not hrs_path.exists():
+        raise FileNotFoundError(f"HRS file not found: {hrs_path}")
+    if not context_dir.exists():
+        raise FileNotFoundError(f"Contextual data directory not found: {context_dir}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load residential history (optional)
+    if args.residential_hist:
+        print("Loading residential history...")
+        residential_hist = ResidentialHistoryHRS(
+            filename=Path(args.residential_hist),
+            hhidpn=args.res_hist_hhidpn,
+            movecol=args.res_hist_movecol,
+            mvyear=args.res_hist_mvyear,
+            mvmonth=args.res_hist_mvmonth,
+            moved_mark=args.res_hist_moved_mark,
+            geoid=args.res_hist_geoid,
+            survey_yr_col=args.res_hist_survey_yr_col,
+            first_tract_mark=args.res_hist_first_tract_mark,
+        )
+    else:
+        residential_hist = None
+
+    # Load HRS data
+    print("Loading HRS interview data...")
+    hrs_epi_data = HRSInterviewData(
+        hrs_path,
+        datecol=args.date_col,
+        move=bool(residential_hist),
+        residential_hist=residential_hist,
+        geoid_prefix=args.geoid_prefix,
+    )
+
+    # Load contextual data
+    print(f"Loading contextual daily data ({args.measure_type})...")
+    contextual_data_all = DailyMeasureDataDir(
+        context_dir,
+        measure_type=args.measure_type,
+        data_col=args.data_col,
+        geoid_col=args.geoid_col,
+        file_extension=args.file_extension,
+    )
+
+    # Process lags (parallel or batch)
+    temp_dir = Path(args.save_dir) / "temp_lag_files"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Temporary lag files will be saved to: {temp_dir}")
+
+    # Generate list of lags to process
+    lags_to_process = list(range(args.n_lags))
+
+    if args.parallel:
+        print(f"Using parallel processing for {args.n_lags} lags")
+        temp_files = process_multiple_lags_parallel(
+            hrs_data=hrs_epi_data,
+            contextual_dir=contextual_data_all,
+            n_days=lags_to_process,
+            id_col=args.id_col,
+            temp_dir=temp_dir,
+            prefix=args.measure_type,
+            geoid_prefix=args.geoid_prefix,
+            include_lag_date=args.include_lag_date,
+            file_format="parquet",
+        )
+    else:
+        print(f"Using batch processing for {args.n_lags} lags")
+        temp_files = process_multiple_lags_batch(
+            hrs_data=hrs_epi_data,
+            contextual_dir=contextual_data_all,
+            n_days=lags_to_process,
+            id_col=args.id_col,
+            temp_dir=temp_dir,
+            prefix=args.measure_type,
+            geoid_prefix=args.geoid_prefix,
+            include_lag_date=args.include_lag_date,
+            file_format="parquet",
+        )
+
+    print(f"Finished processing {len(temp_files)} lag files")
+
+    # Merge all lag outputs
+    print(f"Merging {len(temp_files)} lag outputs with main HRS data...")
+    final_df = hrs_epi_data.df.copy()
+
+    # Extract lag number from filename and sort
+    temp_files.sort(key=lambda f: int(f.stem.split("_lag_")[1].split(".")[0]))
+
+    for i, f in enumerate(temp_files):
+        if (i + 1) % 100 == 0:
+            print(f"  Merged {i + 1}/{len(temp_files)} files...")
+        lag_df = pd.read_parquet(f)
+        final_df = final_df.merge(lag_df, on=args.id_col, how="left")
+
+    # Save final dataset
+    print(f"Saving final dataset to {out_path}")
+    final_df.to_stata(out_path)
+    print("Done.")
