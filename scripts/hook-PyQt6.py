@@ -17,9 +17,6 @@ os.environ["HRS_LINKAGE_LOG_FILE"] = str(log_file)
 
 # Platform-specific initialization
 if sys.platform == "darwin":
-    # Prevent Qt from loading problematic plugins on macOS
-    os.environ["QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM"] = "1"
-
     # Disable Qt permission plugins that cause crashes
     os.environ["QT_MAC_WANTS_LAYER"] = "1"
 

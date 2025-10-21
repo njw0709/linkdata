@@ -8,29 +8,28 @@ PyQt6-based GUI application.
 
 import sys
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, collect_all
 from PyQt6 import QtCore
 
 block_cipher = None
 
-# Collect all submodules from linkdata package
+# Collect all submodules from critical packages
 linkdata_submodules = collect_submodules('linkdata')
 
-# Additional hidden imports for pandas, pyarrow, and PyQt6
+# Collect all pandas and numpy components (they have complex internal structure)
+pandas_datas, pandas_binaries, pandas_hiddenimports = collect_all('pandas')
+numpy_datas, numpy_binaries, numpy_hiddenimports = collect_all('numpy')
+
+# Additional hidden imports for PyQt6 and other packages
 hidden_imports = [
-    'pandas',
-    'pandas._libs.tslibs.timedeltas',
-    'pandas._libs.tslibs.nattype',
-    'pandas._libs.tslibs.np_datetime',
-    'pandas._libs.skiplist',
-    'pyarrow.vendored.version',
     'openpyxl',
     'psutil',
     'tqdm',
+    'pyarrow',
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
-] + linkdata_submodules
+] + linkdata_submodules + pandas_hiddenimports + numpy_hiddenimports
 
 # Collect Qt plugins - required for all platforms
 # These plugins are essential for Qt to function properly
@@ -38,7 +37,7 @@ qt_plugins_path = os.path.join(os.path.dirname(QtCore.__file__), 'Qt6', 'plugins
 datas = [
     (os.path.join(qt_plugins_path, 'platforms'), 'PyQt6/Qt6/plugins/platforms'),
     (os.path.join(qt_plugins_path, 'styles'), 'PyQt6/Qt6/plugins/styles'),
-]
+] + pandas_datas + numpy_datas
 
 # Function to filter out problematic Qt plugins on macOS
 def filter_binaries(binaries):
@@ -70,7 +69,7 @@ def filter_binaries(binaries):
 a = Analysis(
     ['gui_app.py'],
     pathex=[],
-    binaries=[],
+    binaries=pandas_binaries + numpy_binaries,
     datas=datas,
     hiddenimports=hidden_imports,
     hookspath=[],
@@ -79,7 +78,6 @@ a = Analysis(
     excludes=[
         'matplotlib',
         'scipy',
-        'numpy.distutils',
         'tkinter',
         # Exclude Qt plugins that cause crashes on macOS
         'PyQt6.QtPositioning',
