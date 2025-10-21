@@ -4,7 +4,7 @@ This document explains how to create releases of the HRS Linkage Tool GUI applic
 
 ## Overview
 
-The GitHub Actions workflow automatically builds standalone executables for macOS and Windows whenever you push a version tag.
+The GitHub Actions workflow automatically builds Windows executables whenever you push a version tag. macOS builds must be compiled locally and uploaded manually due to Qt compatibility issues on GitHub Actions runners.
 
 ## Creating a Release
 
@@ -40,31 +40,55 @@ git tag -a v0.2.0 -m "Release version 0.2.0
 git push origin v0.2.0
 ```
 
-### 4. Wait for Build
+### 4. Wait for Automated Windows Build
 
 The GitHub Actions workflow will automatically:
-1. Build macOS application (HRSLinkageTool.app)
-2. Build Windows application (HRSLinkageTool.exe)
-3. Create a GitHub Release with both builds attached
-4. Generate release notes from your tag message
-5. Update README.md with the latest version and download links
-6. Commit the updated README back to the main branch
+1. Build Windows application (HRSLinkageTool.exe)
+2. Create a **DRAFT** GitHub Release with the Windows build attached
+3. Generate release notes from your tag message
 
 You can monitor the build progress at:
 `https://github.com/njw0709/linkdata/actions`
 
-### 5. Download Links Update Automatically
+### 5. Build and Upload macOS Builds
 
-After each release, the workflow automatically:
-- Updates the README.md with the latest version number
-- Ensures download links point to the correct repository
-- Commits the changes back to the main branch
+Since macOS builds must be done locally, follow these steps:
 
-The README will display:
-- Latest Version: (e.g., v0.2.0)
-- Download links that always point to `/latest/` release:
-  - macOS: `https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS.zip`
-  - Windows: `https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip`
+#### Build macOS Application Locally
+
+```bash
+# Ensure you have the latest code
+git checkout v0.2.0  # Use your version tag
+
+# Clean previous builds
+rm -rf build/ dist/
+
+# Install dependencies
+uv sync
+uv pip install pyinstaller==6.3.0
+
+# Build the application
+uv run pyinstaller gui_app.spec
+
+# Test the built application
+open dist/HRSLinkageTool.app
+
+# Create ZIP archive for upload
+cd dist
+zip -r HRSLinkageTool-macOS-ARM.zip HRSLinkageTool.app
+cd ..
+```
+
+#### Upload macOS Build to Release
+
+1. Go to the [Releases page](https://github.com/njw0709/linkdata/releases)
+2. Find your DRAFT release (created by GitHub Actions)
+3. Click "Edit release"
+4. Drag and drop `dist/HRSLinkageTool-macOS-ARM.zip` to the assets section
+5. Update the release notes if needed
+6. Click "Publish release" (this changes it from draft to published)
+
+**Note:** Download links in the README use `/latest/` which automatically points to the newest published release, so no manual updates are needed.
 
 ## Testing Locally Before Release
 
@@ -153,32 +177,45 @@ Follow semantic versioning (semver):
 
 Tag format: `vMAJOR.MINOR.PATCH` (e.g., v1.2.3)
 
-## First Release Checklist
+## Release Checklist
 
-Before creating your first release (v0.1.0):
+For each release:
 
-- [ ] Test PyInstaller build locally on macOS (if available)
-- [ ] Test PyInstaller build locally on Windows (if available)
-- [ ] Verify all GUI pages load correctly
-- [ ] Test file selection dialogs
-- [ ] Test data loading functionality
-- [ ] Test the actual linkage process
-- [ ] Update README with your actual GitHub username/repo name
-- [ ] Create and push the v0.1.0 tag
+- [ ] Update version in `pyproject.toml`
+- [ ] Commit and push changes
+- [ ] Create and push version tag (e.g., v0.2.0)
+- [ ] Wait for GitHub Actions to build Windows version and create DRAFT release
+- [ ] Build macOS application locally
+- [ ] Test macOS application works correctly
+- [ ] Create ZIP archive of macOS build
+- [ ] Upload macOS ZIP to the draft release on GitHub
+- [ ] Update release notes if needed
+- [ ] Publish the release (changes from draft to published)
 
-## Automatic README Updates
+## MacOS manual build
 
-The workflow automatically updates the README after each release. The `scripts/update_readme.py` script:
+```bash
+# Ensure you have the latest code
+git checkout v0.2.0  # Use your version tag
 
-1. Extracts release information from the GitHub API
-2. Updates download links to ensure they point to `njw0709/linkdata`
-3. Adds/updates the **Latest Version** badge
-4. Commits changes back to the main branch
+# Clean previous builds
+rm -rf build/ dist/
 
-This ensures the README always reflects:
-- The current repository location
-- The latest version number
-- Working download links
+# Install dependencies
+uv sync
+uv pip install pyinstaller==6.3.0
 
-**Note:** If you fork this repository, the script will automatically update the links to point to your fork after the first release.
+# Build the application
+uv run pyinstaller gui_app.spec
+
+# Test the built application
+open dist/HRSLinkageTool.app
+
+# Create ZIP archive for upload
+cd dist
+zip -r HRSLinkageTool-macOS-ARM.zip HRSLinkageTool.app
+cd ..
+```
+Then, upload the ZIP file to the release on GitHub.
+
 

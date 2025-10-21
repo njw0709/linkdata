@@ -11,7 +11,7 @@ wheels/
 notebooks/
 .DS_Store
 .cursor
-
+local_scripts/
 #data files
 *.dta
 *.csv
