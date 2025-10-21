@@ -361,23 +361,27 @@ class DailyMeasureDataDir:
         dir_name: Union[str, Path],
         measure_type: Optional[str] = None,
         data_col: Optional[str] = None,
+        geoid_col: str = "GEOID10",
         rename_col_dict: Optional[dict] = None,
         read_dtype: str = "float32",
         geoid_filter: Optional[set] = None,
+        file_extension: Optional[str] = None,
     ):
         """
-        Initialize a directory-level wrapper for daily measure CSV files spanning multiple years.
+        Initialize a directory-level wrapper for daily measure files spanning multiple years.
 
         This class manages:
-        - Locating all yearly CSV files for a given `measure_type` (or all files if `measure_type` is None),
+        - Locating all yearly data files for a given `measure_type` (or all files if `measure_type` is None),
         - Validating that each file contains the expected `data_col` (after applying any year-specific renaming),
         - Lazy-loading and caching of `DailyMeasureData` objects by year.
+
+        Supports CSV, Stata (.dta), Parquet, Feather, and Excel formats.
 
         Parameters
         ----------
         dir_name : str or Path
-            Directory containing yearly CSV files. Each file should typically correspond
-            to one year (e.g., "heat_2010.csv", "heat_2011.csv", ...).
+            Directory containing yearly data files. Each file should typically correspond
+            to one year (e.g., "heat_2010.csv", "heat_2011.dta", "heat_2012.parquet", ...).
 
         measure_type : str, optional
             Measurement type identifier (e.g., "tmmx", "heat", "pm25").
@@ -408,6 +412,12 @@ class DailyMeasureDataDir:
             will be passed to all DailyMeasureData objects created when accessing years.
             This dramatically reduces memory usage when you only need data for a small subset of GEOIDs.
 
+        file_extension : str, optional
+            Optional file extension to search for (e.g., ".csv", ".parquet").
+            Extension should include the leading dot. If not provided, searches for all
+            supported formats: .csv, .dta, .parquet, .pq, .feather, .xlsx, .xls.
+            Useful for improving performance when you know your data is in a specific format.
+
         Raises
         ------
         FileNotFoundError
@@ -416,7 +426,7 @@ class DailyMeasureDataDir:
         ValueError
             If neither `measure_type` nor `data_col` is provided.
         ValueError
-            If no CSV files matching `measure_type` are found in the directory.
+            If no data files matching `measure_type` are found in the directory.
         ValueError
             If any file does not contain the expected `data_col` after applying its
             year-specific renaming dictionary. The error message will list all problematic files.
@@ -449,6 +459,13 @@ class DailyMeasureDataDir:
         0  2010-01-01  01001020100       45.2
         1  2010-01-01  01001020200       43.8
         2  2010-01-01  01001020300       44.1
+
+        >>> # Only search for Parquet files
+        >>> pm25_dir = DailyMeasureDataDir(
+        ...     dir_name="data/daily_pm25",
+        ...     measure_type="pm25",
+        ...     file_extension=".parquet"
+        ... )
         """
         self.dirpath = Path(dir_name)
         if not self.dirpath.exists():
@@ -460,6 +477,7 @@ class DailyMeasureDataDir:
         if data_col is None:
             data_col = FILENAME_TO_VARNAME_DICT[measure_type]
         self.data_col = data_col
+        self.geoid_col = geoid_col
         self.measure_type = measure_type
         self.read_dtype = read_dtype
         self.geoid_filter = geoid_filter
@@ -467,17 +485,37 @@ class DailyMeasureDataDir:
         # Rename dict per year (optional)
         self.rename_col_dict = rename_col_dict or {}
 
+        # Determine which file extensions to search for
+        if file_extension is None:
+            # Default: search all supported file extensions (same as io_utils.py)
+            supported_extensions = [
+                ".csv",
+                ".dta",
+                ".parquet",
+                ".pq",
+                ".feather",
+                ".xlsx",
+                ".xls",
+            ]
+        else:
+            # Use only the specified file extension
+            supported_extensions = [file_extension]
+
         # Collect files for measure_type if specified, otherwise all
+        all_files = []
+        for ext in supported_extensions:
+            all_files.extend(self.dirpath.glob(f"*{ext}"))
+
         if measure_type is not None:
             self.files: List[Path] = sorted(
-                f for f in self.dirpath.glob("*.csv") if measure_type in f.name
+                f for f in all_files if measure_type in f.name
             )
         else:
-            self.files: List[Path] = sorted(self.dirpath.glob("*.csv"))
+            self.files: List[Path] = sorted(all_files)
 
         if not self.files:
             raise ValueError(
-                f"No CSV files found for measure type '{measure_type}' in {dir_name}"
+                f"No data files found for measure type '{measure_type}' in {dir_name}"
             )
 
         # Build year → file mapping
@@ -569,6 +607,7 @@ class DailyMeasureDataDir:
                 read_dtype=self.read_dtype,
                 rename_col=rename_col,
                 geoid_filter=self.geoid_filter,
+                geoid_col=self.geoid_col,
             )
 
         return self._cache[year_key]

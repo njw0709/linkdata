@@ -18,6 +18,8 @@ python link_lags.py \
     --data-col HeatIndex \
     --n-lags 2191 \
     --geoid-prefix LINKCEN \
+    --geoid-col GEOID10 \
+    --file-extension .parquet \
     --parallel
 
 With residential history:
@@ -41,6 +43,8 @@ python link_lags.py \
     --data-col HeatIndex \
     --n-lags 2191 \
     --geoid-prefix LINKCEN \
+    --geoid-col GEOID10 \
+    --file-extension .parquet \
     --parallel
 """
 
@@ -107,6 +111,8 @@ def main(args: argparse.Namespace):
         context_dir,
         measure_type=args.measure_type,
         data_col=args.data_col,
+        geoid_col=args.geoid_col,
+        file_extension=args.file_extension,
     )
 
     # -------------------------------------------------------------------
@@ -182,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--context-dir",
         required=True,
-        help="Directory containing daily contextual CSV files",
+        help="Directory containing daily contextual data files (supports CSV, Stata, Parquet, Feather, Excel)",
     )
     parser.add_argument(
         "--output_name",
@@ -212,6 +218,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-col",
         help="Explicit data column name to use (optional, overrides measure type)",
+    )
+    parser.add_argument(
+        "--geoid-col",
+        default="GEOID10",
+        help="GEOID column name in contextual data files (default: GEOID10)",
+    )
+    parser.add_argument(
+        "--file-extension",
+        help="File extension to search for in context directory (e.g., .csv, .parquet). If not specified, searches all supported formats.",
     )
     parser.add_argument(
         "--residential-hist", help="Path to residential history file (optional)"
