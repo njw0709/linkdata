@@ -10,6 +10,43 @@ permissions:
   contents: write
 
 jobs:
+  build-macos-arm:
+    name: Build macOS ARM Application
+    runs-on: macos-latest  # ARM64 (Apple Silicon)
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install pyinstaller==6.3.0
+      
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller gui_app.spec
+      
+      - name: Create ZIP archive with ditto
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent HRSLinkageTool.app HRSLinkageTool-macOS-ARM.zip
+      
+      - name: Upload macOS ARM build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm-build
+          path: dist/HRSLinkageTool-macOS-ARM.zip
+          retention-days: 5
+
   build-windows:
     name: Build Windows Application
     runs-on: windows-latest
@@ -50,12 +87,18 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-windows]
+    needs: [build-macos-arm, build-windows]
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Download macOS ARM build
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm-build
+          path: ./artifacts
       
       - name: Download Windows build
         uses: actions/download-artifact@v4
@@ -72,18 +115,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
-          draft: true
+          draft: false
           prerelease: false
           generate_release_notes: true
-          body: |
-            ## Downloads
-            
-            **Windows**: Download `HRSLinkageTool-Windows.zip` below
-            
-            **macOS**: macOS builds must be manually uploaded due to Qt compatibility issues on GitHub Actions runners.
-            
-            ---
           files: |
+            ./artifacts/HRSLinkageTool-macOS-ARM.zip
             ./artifacts/HRSLinkageTool-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

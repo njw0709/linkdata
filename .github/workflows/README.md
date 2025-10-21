@@ -13,19 +13,21 @@ Automated multi-platform build and release workflow.
 
 ### Workflow Steps
 
-1. **build-windows**: Build Windows application
+1. **build-macos-arm**: Build macOS ARM application
+   - Runs on `macos-latest` (Apple Silicon)
+   - Uses PyInstaller to create `.app` bundle
+   - Creates ZIP archive using `ditto` (preserves macOS attributes): `HRSLinkageTool-macOS-ARM.zip`
+
+2. **build-windows**: Build Windows application
    - Runs on `windows-latest`
    - Uses PyInstaller to create `.exe` application
    - Creates ZIP archive: `HRSLinkageTool-Windows.zip`
 
-2. **create-release**: Create DRAFT GitHub Release
-   - Depends on successful Windows build
-   - Creates DRAFT GitHub Release with version tag
-   - Uploads Windows build as release asset
+3. **create-release**: Create GitHub Release
+   - Depends on successful macOS and Windows builds
+   - Creates published GitHub Release with version tag
+   - Uploads both platform builds as release assets
    - Generates release notes from commits
-   - Waits for manual upload of macOS builds before publishing
-
-**Note:** macOS builds are compiled locally and uploaded manually due to Qt compatibility issues on GitHub Actions runners.
 
 ### Dependencies
 
@@ -47,11 +49,9 @@ permissions:
 ### Outputs
 
 For each release, the workflow produces:
-- **DRAFT GitHub Release** with version tag and release notes
+- **GitHub Release** with version tag and release notes
+- **macOS ARM Build**: `HRSLinkageTool-macOS-ARM.zip` containing `.app` bundle
 - **Windows Build**: `HRSLinkageTool-Windows.zip` containing `.exe` and dependencies
-
-After manually uploading macOS builds and publishing the release:
-- **Published GitHub Release** with both Windows and macOS builds
 
 ### Example Usage
 
@@ -76,19 +76,19 @@ View workflow runs at:
 
 ### Troubleshooting
 
-**Windows build fails:**
+**macOS or Windows build fails:**
 - Check PyInstaller spec file (`gui_app.spec`)
 - Ensure all dependencies are listed in `pyproject.toml`
 - Check for hidden import issues
-
-**macOS local build fails:**
-- Ensure you're using Python 3.9
-- Try: `rm -rf .venv && uv sync`
+- Ensure Python 3.9 is being used
 - Check Qt plugins are correctly excluded in `gui_app.spec`
-- See `BUILD_RELEASE.md` for detailed build instructions
+
+**macOS app fails to open after download:**
+- The workflow uses `ditto` instead of `zip` to preserve macOS attributes
+- If users still have issues, they can run: `xattr -cr HRSLinkageTool.app`
 
 **Release not created:**
 - Verify tag format matches `v*.*.*`
-- Check that Windows build job completed successfully
+- Check that both build jobs completed successfully
 - Verify `GITHUB_TOKEN` has correct permissions
 
