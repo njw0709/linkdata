@@ -29,7 +29,6 @@ Download the pre-built standalone application for your platform:
   - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/HRSLinkageTool.app`
 
 - **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
-- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
   - Extract the ZIP file and run `HRSLinkageTool.exe`
   - If Windows Defender SmartScreen warns about the app, click "More info" → "Run anyway"
   - Note: Unsigned apps may trigger antivirus warnings (false positive)
