@@ -8,6 +8,7 @@ PyQt6-based GUI application.
 
 import sys
 import os
+import shutil
 from PyInstaller.utils.hooks import collect_submodules
 from PyQt6 import QtCore
 
@@ -35,6 +36,18 @@ hidden_imports = [
 # Collect Qt plugins - required for all platforms
 # These plugins are essential for Qt to function properly
 qt_plugins_path = os.path.join(os.path.dirname(QtCore.__file__), 'Qt6', 'plugins')
+
+# AGGRESSIVELY remove problematic Qt plugins on macOS BEFORE bundling
+if sys.platform == 'darwin':
+    problematic_plugins = [
+        os.path.join(qt_plugins_path, 'permissions'),
+        os.path.join(qt_plugins_path, 'position'),
+    ]
+    for plugin_dir in problematic_plugins:
+        if os.path.exists(plugin_dir):
+            print(f"Removing problematic Qt plugin directory: {plugin_dir}")
+            shutil.rmtree(plugin_dir, ignore_errors=True)
+
 datas = [
     (os.path.join(qt_plugins_path, 'platforms'), 'PyQt6/Qt6/plugins/platforms'),
     (os.path.join(qt_plugins_path, 'styles'), 'PyQt6/Qt6/plugins/styles'),
@@ -48,6 +61,8 @@ def filter_binaries(binaries):
     
     excluded_patterns = [
         'libqdarwinpermission',  # Permission plugins (location, camera, etc.)
+        'qdarwinpermission',
+        'permissions',
         'QtLocation',
         'QtPositioning',
         'QtBluetooth',
@@ -58,7 +73,8 @@ def filter_binaries(binaries):
     for dest, source, kind in binaries:
         exclude = False
         for pattern in excluded_patterns:
-            if pattern in source or pattern in dest:
+            # Case-insensitive matching for better compatibility
+            if pattern.lower() in source.lower() or pattern.lower() in dest.lower():
                 print(f"Excluding binary: {dest} ({source})")
                 exclude = True
                 break

@@ -22,7 +22,10 @@ if sys.platform == "darwin":
 
     # Prevent Qt from trying to access location services
     # This prevents the crash in warmUpLocationServices()
-    os.environ["QT_LOGGING_RULES"] = "qt.permissions*=false"
+    os.environ["QT_LOGGING_RULES"] = "qt.permissions*=false;qt.qpa.plugin=false"
+
+    # Explicitly disable permission-related Qt functionality
+    os.environ["QT_QPA_PLATFORMTHEME"] = ""
 
 elif sys.platform == "win32":
     # Enable DPI awareness on Windows for high-resolution displays
