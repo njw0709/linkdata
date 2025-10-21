@@ -58,7 +58,16 @@ class ResidentialHistoryHRS:
             if first_rows.empty:
                 continue
             first = first_rows.iloc[0]
-            start_dt = pd.to_datetime(f"{int(first[self.survey_yr_col])}-01-01")
+            if not pd.isna(first[self.mvyear]):
+                mvyear = f"{int(first[self.mvyear])}"
+                if pd.isna(first[self.mvmonth]):
+                    mvmonth = "01"
+                else:
+                    mvmonth = f"{int(first[self.mvmonth]):02d}"
+            else:
+                mvyear = f"{int(first[self.survey_yr_col])}"
+                mvmonth = "01"
+            start_dt = pd.to_datetime(f"{mvyear}-{mvmonth}-01")
             dates.append(start_dt)
             geoids.append(str(first[self.geoid]).zfill(11))
 
