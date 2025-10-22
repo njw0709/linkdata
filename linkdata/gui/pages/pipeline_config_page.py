@@ -115,11 +115,11 @@ class PipelineConfigPage(QWizardPage):
         hrs_path = wizard.field("hrs_data_path")
         date_col = wizard.field("date_col")
         id_col = wizard.field("id_col")
-        geoid_prefix = wizard.field("geoid_prefix")
+        geoid_col = wizard.field("geoid_col")
         summary_lines.append(f"File: {hrs_path}")
         summary_lines.append(f"Date Column: {date_col}")
         summary_lines.append(f"ID Column: {id_col}")
-        summary_lines.append(f"GEOID Prefix: {geoid_prefix}")
+        summary_lines.append(f"GEOID Column: {geoid_col}")
         summary_lines.append("")
 
         # Residential History

@@ -55,12 +55,12 @@ def compute_required_years(
 
 def extract_unique_geoids(
     hrs_data_with_lags: pd.DataFrame,
-    geoid_prefix: str = "LINKCEN",
+    geoid_col: str = "LINKCEN2010",
 ) -> set:
     """
     Extract all unique GEOIDs from n-day-prior GEOID columns in the DataFrame.
 
-    This function identifies all GEOID columns (those containing the geoid_prefix)
+    This function identifies all GEOID columns (those containing the geoid_col name)
     and collects unique values across all of them. This is useful for filtering
     contextual data to only include GEOIDs that are actually needed.
 
@@ -69,8 +69,8 @@ def extract_unique_geoids(
     hrs_data_with_lags : pd.DataFrame
         DataFrame containing GEOID columns (typically output from
         HRSContextLinker.prepare_lag_columns_batch).
-    geoid_prefix : str, default "LINKCEN"
-        Prefix used to identify GEOID columns.
+    geoid_col : str, default "LINKCEN2010"
+        Name of the GEOID column used to identify GEOID-related columns.
 
     Returns
     -------
@@ -82,10 +82,10 @@ def extract_unique_geoids(
     >>> hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
     ...     hrs_data, n_days=[0, 7, 30]
     ... )
-    >>> unique_geoids = extract_unique_geoids(hrs_with_lags)
+    >>> unique_geoids = extract_unique_geoids(hrs_with_lags, "LINKCEN2010")
     >>> print(f"Need data for {len(unique_geoids)} unique GEOIDs")
     """
-    geoid_cols = [c for c in hrs_data_with_lags.columns if geoid_prefix in c]
+    geoid_cols = [c for c in hrs_data_with_lags.columns if geoid_col in c]
     all_geoids = set()
 
     for col in geoid_cols:
@@ -102,7 +102,7 @@ def process_multiple_lags_batch(
     id_col: str,
     temp_dir: Path,
     prefix: str = "",
-    geoid_prefix: str = "LINKCEN",
+    geoid_col: Optional[str] = None,
     include_lag_date: bool = False,
     file_format: str = "parquet",
 ) -> List[Path]:
@@ -131,8 +131,8 @@ def process_multiple_lags_batch(
         Directory to save temporary lag files
     prefix : str, optional
         Prefix for output filenames
-    geoid_prefix : str, default "LINKCEN"
-        Prefix for GEOID column names
+    geoid_col : str, optional
+        Name of the GEOID column in HRS data
     include_lag_date : bool, default False
         Whether to include lag date columns in output
     file_format : {"parquet", "feather", "csv"}, default "parquet"
@@ -143,17 +143,19 @@ def process_multiple_lags_batch(
     List[Path]
         List of paths to temporary files created for each lag
     """
+    if geoid_col is None:
+        geoid_col = hrs_data.geoid_col
 
     print(f"\n🔄 Starting batch processing for {len(n_days)} lags...")
 
     # Step 1: Pre-compute all lag columns
     print(f"📋 Pre-computing date/GEOID columns for lags: {n_days}")
     hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
-        hrs_data, n_days, geoid_prefix
+        hrs_data, n_days, geoid_col
     )
 
     # Step 2: Extract unique GEOIDs
-    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_prefix)
+    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_col)
     print(f"🔍 Extracted {len(unique_geoids)} unique GEOIDs from all lag columns")
 
     # Step 3: Compute required years and load filtered contextual data
@@ -194,7 +196,7 @@ def process_multiple_lags_batch(
             contextual_geoid_col=contextual_geoid_col,
             contextual_data_col=contextual_data_col,
             include_lag_date=include_lag_date,
-            geoid_prefix=geoid_prefix,
+            geoid_col=geoid_col,
         )
 
         # Skip if no valid data
@@ -221,7 +223,7 @@ def process_multiple_lags_parallel(
     id_col: str,
     temp_dir: Path,
     prefix: str = "",
-    geoid_prefix: str = "LINKCEN",
+    geoid_col: Optional[str] = None,
     include_lag_date: bool = False,
     file_format: str = "parquet",
     max_workers: Optional[int] = None,
@@ -247,8 +249,8 @@ def process_multiple_lags_parallel(
         Directory to save temporary lag files
     prefix : str, optional
         Prefix for output filenames
-    geoid_prefix : str, default "LINKCEN"
-        Prefix for GEOID column names
+    geoid_col : str, optional
+        Name of the GEOID column in HRS data
     include_lag_date : bool, default False
         Whether to include lag date columns in output
     file_format : {"parquet", "feather", "csv"}, default "parquet"
@@ -271,6 +273,9 @@ def process_multiple_lags_parallel(
     from .hrs import HRSContextLinker
     import os
 
+    if geoid_col is None:
+        geoid_col = hrs_data.geoid_col
+
     print(f"\n🚀 Starting parallel processing for {len(n_days)} lags...")
 
     # Step 1: Pre-compute all lag columns
@@ -278,11 +283,11 @@ def process_multiple_lags_parallel(
         f"📋 Pre-computing date/GEOID columns for lags: {min(n_days)} to {max(n_days)}"
     )
     hrs_with_lags = HRSContextLinker.prepare_lag_columns_batch(
-        hrs_data, n_days, geoid_prefix
+        hrs_data, n_days, geoid_col
     )
 
     # Step 2: Extract unique GEOIDs
-    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_prefix)
+    unique_geoids = extract_unique_geoids(hrs_with_lags, geoid_col)
     print(f"🔍 Extracted {len(unique_geoids)} unique GEOIDs from all lag columns")
 
     # Step 3: Compute required years and load filtered contextual data
@@ -369,7 +374,7 @@ def process_multiple_lags_parallel(
                 prefix=prefix,
                 include_lag_date=include_lag_date,
                 file_format=file_format,
-                geoid_prefix=geoid_prefix,
+                geoid_col=geoid_col,
                 precomputed_lag_df=hrs_with_lags,
                 preloaded_contextual_df=contextual_df,
                 contextual_date_col=contextual_date_col,
@@ -406,7 +411,7 @@ def _process_single_lag_internal(
     prefix: str = "",
     include_lag_date: bool = False,
     file_format: str = "parquet",
-    geoid_prefix: str = "LINKCEN",
+    geoid_col: Optional[str] = None,
     precomputed_lag_df: Optional[pd.DataFrame] = None,
     preloaded_contextual_df: Optional[pd.DataFrame] = None,
     contextual_date_col: Optional[str] = None,
@@ -436,8 +441,8 @@ def _process_single_lag_internal(
         Whether to include the lagged date column in the output.
     file_format : {"parquet", "feather", "csv"}, default "parquet"
         File format for the temporary output file.
-    geoid_prefix : str, default "LINKCEN"
-        Prefix for GEOID column names.
+    geoid_col : str, optional
+        Name of the GEOID column in HRS data.
     precomputed_lag_df : pd.DataFrame, optional
         Pre-computed DataFrame with date and GEOID columns. If provided, skips computation.
     preloaded_contextual_df : pd.DataFrame, optional
@@ -481,7 +486,7 @@ def _process_single_lag_internal(
                 contextual_geoid_col=contextual_geoid_col,
                 contextual_data_col=contextual_data_col,
                 include_lag_date=include_lag_date,
-                geoid_prefix=geoid_prefix,
+                geoid_col=geoid_col,
             )
         else:
             # Fallback: Compute lag columns for this single lag
@@ -490,12 +495,15 @@ def _process_single_lag_internal(
                     "contextual_dir must be provided when not using precomputed data"
                 )
 
+            if geoid_col is None:
+                geoid_col = hrs_data.geoid_col
+
             hrs_with_lag = HRSContextLinker.prepare_lag_columns_batch(
-                hrs_data, [n], geoid_prefix
+                hrs_data, [n], geoid_col
             )
 
             # Extract unique GEOIDs for this lag
-            unique_geoids = extract_unique_geoids(hrs_with_lag, geoid_prefix)
+            unique_geoids = extract_unique_geoids(hrs_with_lag, geoid_col)
 
             # Compute required years and load filtered data
             required_years = compute_required_years(hrs_data, n)
@@ -515,7 +523,7 @@ def _process_single_lag_internal(
             first_year = years_to_load[0]
             first_context = contextual_dir[first_year]
             date_col = first_context.date_col
-            geoid_col = first_context.geoid_col
+            contextual_geoid_col_name = first_context.geoid_col
             data_col = first_context.data_col
 
             # Merge
@@ -526,10 +534,10 @@ def _process_single_lag_internal(
                 precomputed_lag_df=hrs_with_lag,
                 preloaded_contextual_df=contextual_df,
                 contextual_date_col=date_col,
-                contextual_geoid_col=geoid_col,
+                contextual_geoid_col=contextual_geoid_col_name,
                 contextual_data_col=data_col,
                 include_lag_date=include_lag_date,
-                geoid_prefix=geoid_prefix,
+                geoid_col=geoid_col,
             )
 
         # If only ID column (no valid merged values), skip
@@ -572,8 +580,8 @@ def run_pipeline(args: argparse.Namespace):
         - date_col: Interview date column
         - measure_type: Measurement type (e.g., heat_index, pm25)
         - data_col: Data column name in contextual files
-        - geoid_col: GEOID column name in contextual files
-        - geoid_prefix: Prefix for GEOID columns (default: LINKCEN)
+        - geoid_col: GEOID column name in HRS data
+        - contextual_geoid_col: GEOID column name in contextual files
         - n_lags: Number of lags to process
         - file_extension: File extension for contextual files (optional)
         - parallel: Whether to use parallel processing
@@ -615,18 +623,20 @@ def run_pipeline(args: argparse.Namespace):
         datecol=args.date_col,
         move=bool(residential_hist),
         residential_hist=residential_hist,
-        geoid_prefix=args.geoid_prefix,
+        geoid_col=args.geoid_col,
     )
 
     # Load contextual data
     print(f"Loading contextual daily data ({args.measure_type})...")
     # Use context_date_col if provided, otherwise default to "Date"
     context_date_col = getattr(args, "context_date_col", None) or "Date"
+    # Use contextual_geoid_col if provided, otherwise default to "GEOID10"
+    contextual_geoid_col = getattr(args, "contextual_geoid_col", None) or "GEOID10"
     contextual_data_all = DailyMeasureDataDir(
         context_dir,
         measure_type=args.measure_type,
         data_col=args.data_col,
-        geoid_col=args.geoid_col,
+        geoid_col=contextual_geoid_col,
         date_col=context_date_col,
         file_extension=args.file_extension,
     )
@@ -648,7 +658,7 @@ def run_pipeline(args: argparse.Namespace):
             id_col=args.id_col,
             temp_dir=temp_dir,
             prefix=args.measure_type,
-            geoid_prefix=args.geoid_prefix,
+            geoid_col=args.geoid_col,
             include_lag_date=args.include_lag_date,
             file_format="parquet",
         )
@@ -661,7 +671,7 @@ def run_pipeline(args: argparse.Namespace):
             id_col=args.id_col,
             temp_dir=temp_dir,
             prefix=args.measure_type,
-            geoid_prefix=args.geoid_prefix,
+            geoid_col=args.geoid_col,
             include_lag_date=args.include_lag_date,
             file_format="parquet",
         )

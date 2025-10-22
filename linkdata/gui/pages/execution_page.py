@@ -164,9 +164,9 @@ class ExecutionPage(QWizardPage):
             save_dir=wizard.field("save_dir"),
             data_col=wizard.field("data_col"),
             geoid_col=wizard.field("geoid_col"),
+            contextual_geoid_col=wizard.field("contextual_geoid_col"),
             context_date_col=wizard.field("context_date_col"),
             n_lags=wizard.field("n_lags"),
-            geoid_prefix=wizard.field("geoid_prefix"),
             parallel=wizard.field("parallel"),
             include_lag_date=wizard.field("include_lag_date"),
         )

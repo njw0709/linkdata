@@ -183,7 +183,7 @@ class ContextualDataPage(QWizardPage):
         self.registerField("context_dir*", self.dir_picker.path_edit)
         self.registerField("measure_type*", self.measure_type_edit)
         self.registerField("data_col*", self.data_col_combo, "currentText")
-        self.registerField("geoid_col", self.geoid_col_combo, "currentText")
+        self.registerField("contextual_geoid_col", self.geoid_col_combo, "currentText")
         self.registerField("context_date_col", self.date_col_combo, "currentText")
         self.registerField("file_extension", self.file_ext_combo, "currentText")
 

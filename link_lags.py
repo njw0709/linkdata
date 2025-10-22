@@ -17,8 +17,8 @@ python link_lags.py \
     --measure-type heat_index \
     --data-col HeatIndex \
     --n-lags 2191 \
-    --geoid-prefix LINKCEN \
-    --geoid-col GEOID10 \
+    --geoid-col LINKCEN2010 \
+    --contextual-geoid-col GEOID10 \
     --file-extension .parquet \
     --parallel
 
@@ -42,8 +42,8 @@ python link_lags.py \
     --measure-type heat_index \
     --data-col HeatIndex \
     --n-lags 2191 \
-    --geoid-prefix LINKCEN \
-    --geoid-col GEOID10 \
+    --geoid-col LINKCEN2010 \
+    --contextual-geoid-col GEOID10 \
     --file-extension .parquet \
     --parallel
 """
@@ -95,6 +95,11 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--geoid-col",
+        default="LINKCEN2010",
+        help="GEOID column name in HRS data (default: LINKCEN2010)",
+    )
+    parser.add_argument(
+        "--contextual-geoid-col",
         default="GEOID10",
         help="GEOID column name in contextual data files (default: GEOID10)",
     )
@@ -157,11 +162,6 @@ def _create_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--parallel", action="store_true", help="Use parallel processing"
-    )
-    parser.add_argument(
-        "--geoid-prefix",
-        default="LINKCEN",
-        help="Prefix for GEOID column names (default: LINKCEN)",
     )
     parser.add_argument(
         "--include-lag-date",

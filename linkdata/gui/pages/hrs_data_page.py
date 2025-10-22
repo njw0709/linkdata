@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QGroupBox,
     QFormLayout,
-    QLineEdit,
 )
 from PyQt6.QtCore import Qt
 
@@ -76,11 +75,11 @@ class HRSDataPage(QWizardPage):
         self.id_col_combo = QComboBox()
         config_layout.addRow("ID Column:", self.id_col_combo)
 
-        self.geoid_prefix_edit = QLineEdit("LINKCEN")
-        config_layout.addRow("GEOID Prefix:", self.geoid_prefix_edit)
+        self.geoid_col_combo = QComboBox()
+        config_layout.addRow("GEOID Column:", self.geoid_col_combo)
 
         config_note = QLabel(
-            "Note: GEOID prefix will not be used if residential history is provided"
+            "Note: GEOID column will not be used if residential history is provided"
         )
         config_note.setWordWrap(True)
         config_note.setStyleSheet("color: gray; font-style: italic;")
@@ -101,7 +100,7 @@ class HRSDataPage(QWizardPage):
         self.registerField("hrs_data_path*", self.file_picker.path_edit)
         self.registerField("date_col*", self.date_column_combo, "currentText")
         self.registerField("id_col*", self.id_col_combo, "currentText")
-        self.registerField("geoid_prefix*", self.geoid_prefix_edit)
+        self.registerField("geoid_col*", self.geoid_col_combo, "currentText")
 
     def _on_file_selected(self, file_path: str):
         """Handle file selection."""
@@ -113,6 +112,7 @@ class HRSDataPage(QWizardPage):
             self.preview_table.set_dataframe(None)
             self.date_column_combo.clear()
             self.id_col_combo.clear()
+            self.geoid_col_combo.clear()
             self.status_label.setText(f"Error: {error_msg}")
             self.preview_df = None
             return
@@ -125,6 +125,7 @@ class HRSDataPage(QWizardPage):
             self.preview_table.set_dataframe(None)
             self.date_column_combo.clear()
             self.id_col_combo.clear()
+            self.geoid_col_combo.clear()
             self.status_label.setText(f"Error: {error_msg}")
             self.preview_df = None
             return
@@ -146,6 +147,16 @@ class HRSDataPage(QWizardPage):
         hhidpn_index = self.id_col_combo.findText("hhidpn")
         if hhidpn_index >= 0:
             self.id_col_combo.setCurrentIndex(hhidpn_index)
+
+        # Populate geoid column dropdown
+        self.geoid_col_combo.clear()
+        self.geoid_col_combo.addItems(columns)
+        # Try to find and set default to a column containing "LINKCEN" or "GEOID"
+        for possible_geoid in ["LINKCEN2010", "GEOID", "geoid"]:
+            geoid_index = self.geoid_col_combo.findText(possible_geoid)
+            if geoid_index >= 0:
+                self.geoid_col_combo.setCurrentIndex(geoid_index)
+                break
 
         self.status_label.setText(
             f"Loaded successfully: {len(preview_df.columns)} columns, "
@@ -181,6 +192,6 @@ class HRSDataPage(QWizardPage):
             return False
         if not self.id_col_combo.currentText():
             return False
-        if not self.geoid_prefix_edit.text().strip():
+        if not self.geoid_col_combo.currentText():
             return False
         return True
