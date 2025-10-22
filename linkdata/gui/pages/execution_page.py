@@ -3,6 +3,7 @@ Pipeline execution page.
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -21,6 +22,20 @@ from PyQt6.QtGui import QDesktopServices
 from linkdata.process import run_pipeline
 
 
+class OutputRedirector:
+    """Redirects stdout/stderr to Qt signal."""
+
+    def __init__(self, emit_func):
+        self.emit_func = emit_func
+
+    def write(self, text):
+        if text.strip():
+            self.emit_func(text.rstrip())
+
+    def flush(self):
+        pass
+
+
 class PipelineRunner(QThread):
     """Thread for running the pipeline function."""
 
@@ -33,7 +48,15 @@ class PipelineRunner(QThread):
 
     def run(self):
         """Run the pipeline function."""
+        # Save original stdout/stderr
+        original_stdout = sys.stdout
+        original_stderr = sys.stderr
+
         try:
+            # Redirect stdout and stderr to capture print statements
+            sys.stdout = OutputRedirector(self.output.emit)
+            sys.stderr = OutputRedirector(self.output.emit)
+
             self.output.emit("Starting pipeline execution...")
             self.output.emit(f"HRS data: {self.args.hrs_data}")
             self.output.emit(f"Context directory: {self.args.context_dir}")
@@ -51,6 +74,11 @@ class PipelineRunner(QThread):
 
         except Exception as e:
             self.finished_signal.emit(False, f"Error running pipeline: {str(e)}")
+
+        finally:
+            # Restore original stdout/stderr
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
 
 
 class ExecutionPage(QWizardPage):

@@ -14,8 +14,6 @@ A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5
 
 ### Quick Start (Standalone Application)
 
-**Latest Version:** v0.2.2
-
 Download the pre-built standalone application for your platform:
 
 - **macOS (Apple Silicon/M1/M2/M3)**: [Download HRSLinkageTool-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS-ARM.zip)
