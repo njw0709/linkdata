@@ -275,9 +275,7 @@ Contributions are welcome! Please ensure:
 
 ## License
 
-[Add license information]
-
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).  
+You are free to use, modify, and distribute this software, provided that you include the original copyright and license notice.
 ## Citation
-
-[Add citation information if applicable]
 
