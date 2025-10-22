@@ -2,6 +2,8 @@
 Residential History configuration page.
 """
 
+import pandas as pd
+
 from PyQt6.QtWidgets import (
     QWizardPage,
     QVBoxLayout,
@@ -10,8 +12,6 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QGroupBox,
     QFormLayout,
-    QLineEdit,
-    QDoubleSpinBox,
     QMessageBox,
 )
 
@@ -70,6 +70,7 @@ class ResidentialHistoryPage(QWizardPage):
         columns_layout.addRow("ID Column (hhidpn):", self.hhidpn_combo)
 
         self.movecol_combo = QComboBox()
+        self.movecol_combo.currentTextChanged.connect(self._on_movecol_changed)
         columns_layout.addRow("Move Indicator Column:", self.movecol_combo)
 
         self.mvyear_combo = QComboBox()
@@ -84,16 +85,14 @@ class ResidentialHistoryPage(QWizardPage):
         self.geoid_combo = QComboBox()
         columns_layout.addRow("GEOID Column:", self.geoid_combo)
 
-        # Text inputs for marks
-        self.moved_mark_edit = QLineEdit("1. move")
-        columns_layout.addRow("Moved Mark Value:", self.moved_mark_edit)
+        # Dropdowns for marks (populated from move indicator column)
+        self.moved_mark_combo = QComboBox()
+        self.moved_mark_combo.setEditable(True)
+        columns_layout.addRow("Moved Mark Value:", self.moved_mark_combo)
 
-        self.first_tract_spin = QDoubleSpinBox()
-        self.first_tract_spin.setDecimals(1)
-        self.first_tract_spin.setMinimum(-999999)
-        self.first_tract_spin.setMaximum(999999)
-        self.first_tract_spin.setValue(999.0)
-        columns_layout.addRow("First Tract Mark:", self.first_tract_spin)
+        self.first_tract_combo = QComboBox()
+        self.first_tract_combo.setEditable(True)
+        columns_layout.addRow("First Tract Mark:", self.first_tract_combo)
 
         res_hist_layout.addLayout(columns_layout)
 
@@ -115,8 +114,10 @@ class ResidentialHistoryPage(QWizardPage):
             "res_hist_survey_yr_col", self.survey_yr_combo, "currentText"
         )
         self.registerField("res_hist_geoid", self.geoid_combo, "currentText")
-        self.registerField("res_hist_moved_mark", self.moved_mark_edit)
-        self.registerField("res_hist_first_tract_mark", self.first_tract_spin, "value")
+        self.registerField("res_hist_moved_mark", self.moved_mark_combo, "currentText")
+        self.registerField(
+            "res_hist_first_tract_mark", self.first_tract_combo, "currentText"
+        )
 
     def _on_checkbox_changed(self, state):
         """Handle checkbox state change."""
@@ -177,6 +178,43 @@ class ResidentialHistoryPage(QWizardPage):
 
         self.completeChanged.emit()
 
+    def _on_movecol_changed(self, col_name: str):
+        """Handle move column selection change - populate mark dropdowns."""
+        if not col_name or not self.file_picker.get_path():
+            return
+
+        try:
+            # Read first 1000 rows to get unique values
+            file_path = self.file_picker.get_path()
+            df = pd.read_stata(
+                file_path, chunksize=None, iterator=False, columns=[col_name]
+            )
+
+            # Limit to first 1000 rows
+            df = df.head(1000)
+
+            # Get unique values and convert to strings
+            unique_values = df[col_name].dropna().unique()
+            unique_values = sorted([str(v) for v in unique_values])
+
+            # Populate both dropdowns
+            self.moved_mark_combo.clear()
+            self.moved_mark_combo.addItems(unique_values)
+
+            self.first_tract_combo.clear()
+            self.first_tract_combo.addItems(unique_values)
+
+            # Set defaults if they exist
+            self._set_default_if_exists(self.moved_mark_combo, "1. move")
+            self._set_default_if_exists(self.first_tract_combo, "999.0")
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Error Loading Values",
+                f"Could not load unique values from move column: {str(e)}",
+            )
+
     def _clear_column_combos(self):
         """Clear all column combo boxes."""
         self.hhidpn_combo.clear()
@@ -185,6 +223,8 @@ class ResidentialHistoryPage(QWizardPage):
         self.mvmonth_combo.clear()
         self.survey_yr_combo.clear()
         self.geoid_combo.clear()
+        self.moved_mark_combo.clear()
+        self.first_tract_combo.clear()
 
     def _set_default_if_exists(self, combo: QComboBox, default_value: str):
         """Set combo box to default value if it exists in the list."""

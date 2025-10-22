@@ -128,11 +128,13 @@ class ContextualDataPage(QWizardPage):
         self.file_ext_combo.currentTextChanged.connect(self._on_settings_changed)
         dir_layout.addRow("File Extension:", self.file_ext_combo)
 
-        # Measure type input
+        # File name filter input
         self.measure_type_edit = QLineEdit()
-        self.measure_type_edit.setPlaceholderText("e.g., heat_index, pm25, ozone")
+        self.measure_type_edit.setPlaceholderText(
+            "Files containing this substring will be selected"
+        )
         self.measure_type_edit.textChanged.connect(self._on_settings_changed)
-        dir_layout.addRow("Measure Type:", self.measure_type_edit)
+        dir_layout.addRow("File Name Filter:", self.measure_type_edit)
 
         dir_group.setLayout(dir_layout)
         layout.addWidget(dir_group)
@@ -168,6 +170,9 @@ class ContextualDataPage(QWizardPage):
         self.geoid_col_combo = QComboBox()
         columns_layout.addRow("GEOID Column:", self.geoid_col_combo)
 
+        self.date_col_combo = QComboBox()
+        columns_layout.addRow("Date Column:", self.date_col_combo)
+
         columns_group.setLayout(columns_layout)
         layout.addWidget(columns_group)
 
@@ -179,6 +184,7 @@ class ContextualDataPage(QWizardPage):
         self.registerField("measure_type*", self.measure_type_edit)
         self.registerField("data_col*", self.data_col_combo, "currentText")
         self.registerField("geoid_col", self.geoid_col_combo, "currentText")
+        self.registerField("context_date_col", self.date_col_combo, "currentText")
         self.registerField("file_extension", self.file_ext_combo, "currentText")
 
     def _on_directory_selected(self, dir_path: str):
@@ -232,6 +238,7 @@ class ContextualDataPage(QWizardPage):
             self.preview_table.set_dataframe(None)
             self.data_col_combo.clear()
             self.geoid_col_combo.clear()
+            self.date_col_combo.clear()
             self.file_paths = []
 
         self.completeChanged.emit()
@@ -256,8 +263,12 @@ class ContextualDataPage(QWizardPage):
         self.geoid_col_combo.clear()
         self.geoid_col_combo.addItems(columns)
 
+        self.date_col_combo.clear()
+        self.date_col_combo.addItems(columns)
+
         # Try to set defaults
         self._set_default_if_exists(self.geoid_col_combo, "GEOID10")
+        self._set_default_if_exists(self.date_col_combo, "Date")
 
         self.completeChanged.emit()
 
@@ -287,6 +298,8 @@ class ContextualDataPage(QWizardPage):
         if not self.data_col_combo.currentText():
             return False
         if not self.geoid_col_combo.currentText():
+            return False
+        if not self.date_col_combo.currentText():
             return False
 
         return True

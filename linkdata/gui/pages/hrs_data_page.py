@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QGroupBox,
     QFormLayout,
+    QLineEdit,
 )
 from PyQt6.QtCore import Qt
 
@@ -68,6 +69,26 @@ class HRSDataPage(QWizardPage):
         date_group.setLayout(date_layout)
         layout.addWidget(date_group)
 
+        # Configuration group
+        config_group = QGroupBox("Data Configuration")
+        config_layout = QFormLayout()
+
+        self.id_col_combo = QComboBox()
+        config_layout.addRow("ID Column:", self.id_col_combo)
+
+        self.geoid_prefix_edit = QLineEdit("LINKCEN")
+        config_layout.addRow("GEOID Prefix:", self.geoid_prefix_edit)
+
+        config_note = QLabel(
+            "Note: GEOID prefix will not be used if residential history is provided"
+        )
+        config_note.setWordWrap(True)
+        config_note.setStyleSheet("color: gray; font-style: italic;")
+        config_layout.addRow("", config_note)
+
+        config_group.setLayout(config_layout)
+        layout.addWidget(config_group)
+
         # Status label
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
@@ -79,6 +100,8 @@ class HRSDataPage(QWizardPage):
         # Register fields for wizard
         self.registerField("hrs_data_path*", self.file_picker.path_edit)
         self.registerField("date_col*", self.date_column_combo, "currentText")
+        self.registerField("id_col*", self.id_col_combo, "currentText")
+        self.registerField("geoid_prefix*", self.geoid_prefix_edit)
 
     def _on_file_selected(self, file_path: str):
         """Handle file selection."""
@@ -89,6 +112,7 @@ class HRSDataPage(QWizardPage):
             QMessageBox.warning(self, "Invalid File", error_msg)
             self.preview_table.set_dataframe(None)
             self.date_column_combo.clear()
+            self.id_col_combo.clear()
             self.status_label.setText(f"Error: {error_msg}")
             self.preview_df = None
             return
@@ -100,6 +124,7 @@ class HRSDataPage(QWizardPage):
             QMessageBox.warning(self, "Error Loading File", error_msg)
             self.preview_table.set_dataframe(None)
             self.date_column_combo.clear()
+            self.id_col_combo.clear()
             self.status_label.setText(f"Error: {error_msg}")
             self.preview_df = None
             return
@@ -108,9 +133,19 @@ class HRSDataPage(QWizardPage):
         self.preview_df = preview_df
         self.preview_table.set_dataframe(preview_df)
 
+        columns = preview_df.columns.tolist()
+
         # Populate date column dropdown
         self.date_column_combo.clear()
-        self.date_column_combo.addItems(preview_df.columns.tolist())
+        self.date_column_combo.addItems(columns)
+
+        # Populate id column dropdown
+        self.id_col_combo.clear()
+        self.id_col_combo.addItems(columns)
+        # Try to set default to "hhidpn"
+        hhidpn_index = self.id_col_combo.findText("hhidpn")
+        if hhidpn_index >= 0:
+            self.id_col_combo.setCurrentIndex(hhidpn_index)
 
         self.status_label.setText(
             f"Loaded successfully: {len(preview_df.columns)} columns, "
@@ -143,5 +178,9 @@ class HRSDataPage(QWizardPage):
         if not self.file_picker.is_valid():
             return False
         if not self.date_column_combo.currentText():
+            return False
+        if not self.id_col_combo.currentText():
+            return False
+        if not self.geoid_prefix_edit.text().strip():
             return False
         return True

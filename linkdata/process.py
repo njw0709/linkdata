@@ -620,11 +620,14 @@ def run_pipeline(args: argparse.Namespace):
 
     # Load contextual data
     print(f"Loading contextual daily data ({args.measure_type})...")
+    # Use context_date_col if provided, otherwise default to "Date"
+    context_date_col = getattr(args, "context_date_col", None) or "Date"
     contextual_data_all = DailyMeasureDataDir(
         context_dir,
         measure_type=args.measure_type,
         data_col=args.data_col,
         geoid_col=args.geoid_col,
+        date_col=context_date_col,
         file_extension=args.file_extension,
     )
 

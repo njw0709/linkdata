@@ -34,18 +34,12 @@ class PipelineConfigPage(QWizardPage):
         general_group = QGroupBox("General Settings")
         general_layout = QFormLayout()
 
-        self.id_col_edit = QLineEdit("hhidpn")
-        general_layout.addRow("ID Column:", self.id_col_edit)
-
         self.n_lags_spin = QSpinBox()
         self.n_lags_spin.setMinimum(1)
         self.n_lags_spin.setMaximum(10000)
         self.n_lags_spin.setValue(365)
         self.n_lags_spin.setSingleStep(1)
         general_layout.addRow("Number of Lags:", self.n_lags_spin)
-
-        self.geoid_prefix_edit = QLineEdit("LINKCEN")
-        general_layout.addRow("GEOID Prefix:", self.geoid_prefix_edit)
 
         general_group.setLayout(general_layout)
         layout.addWidget(general_group)
@@ -98,9 +92,7 @@ class PipelineConfigPage(QWizardPage):
         self.setLayout(layout)
 
         # Register fields
-        self.registerField("id_col*", self.id_col_edit)
         self.registerField("n_lags", self.n_lags_spin)
-        self.registerField("geoid_prefix*", self.geoid_prefix_edit)
         self.registerField("parallel", self.parallel_checkbox)
         self.registerField("include_lag_date", self.include_lag_date_checkbox)
         self.registerField("save_dir*", self.save_dir_picker.path_edit)
@@ -122,8 +114,12 @@ class PipelineConfigPage(QWizardPage):
         summary_lines.append("=== HRS Survey Data ===")
         hrs_path = wizard.field("hrs_data_path")
         date_col = wizard.field("date_col")
+        id_col = wizard.field("id_col")
+        geoid_prefix = wizard.field("geoid_prefix")
         summary_lines.append(f"File: {hrs_path}")
         summary_lines.append(f"Date Column: {date_col}")
+        summary_lines.append(f"ID Column: {id_col}")
+        summary_lines.append(f"GEOID Prefix: {geoid_prefix}")
         summary_lines.append("")
 
         # Residential History
@@ -155,9 +151,7 @@ class PipelineConfigPage(QWizardPage):
 
         # Pipeline Settings
         summary_lines.append("=== Pipeline Settings ===")
-        summary_lines.append(f"ID Column: {self.id_col_edit.text()}")
         summary_lines.append(f"Number of Lags: {self.n_lags_spin.value()}")
-        summary_lines.append(f"GEOID Prefix: {self.geoid_prefix_edit.text()}")
         summary_lines.append(
             f"Parallel Processing: {'Yes' if self.parallel_checkbox.isChecked() else 'No'}"
         )
@@ -176,10 +170,6 @@ class PipelineConfigPage(QWizardPage):
     def isComplete(self):
         """Check if the page is complete."""
         # Must have all required fields
-        if not self.id_col_edit.text().strip():
-            return False
-        if not self.geoid_prefix_edit.text().strip():
-            return False
         if not self.save_dir_picker.get_path():
             return False
         if not self.save_dir_picker.is_valid():

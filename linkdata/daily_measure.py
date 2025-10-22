@@ -362,6 +362,7 @@ class DailyMeasureDataDir:
         measure_type: Optional[str] = None,
         data_col: Optional[str] = None,
         geoid_col: str = "GEOID10",
+        date_col: str = "Date",
         rename_col_dict: Optional[dict] = None,
         read_dtype: str = "float32",
         geoid_filter: Optional[set] = None,
@@ -392,6 +393,12 @@ class DailyMeasureDataDir:
         data_col : str, optional
             Explicit name of the data column to use when loading each file.
             If provided, this overrides the `measure_type` inference.
+
+        geoid_col : str, default "GEOID10"
+            Name of the column that stores geographic identifiers.
+
+        date_col : str, default "Date"
+            Name of the column containing date information in the data files.
 
         rename_col_dict : dict, optional
             Optional mapping from year (as string) to column-renaming dictionaries.
@@ -478,6 +485,7 @@ class DailyMeasureDataDir:
             data_col = FILENAME_TO_VARNAME_DICT[measure_type]
         self.data_col = data_col
         self.geoid_col = geoid_col
+        self.date_col = date_col
         self.measure_type = measure_type
         self.read_dtype = read_dtype
         self.geoid_filter = geoid_filter
@@ -608,6 +616,7 @@ class DailyMeasureDataDir:
                 rename_col=rename_col,
                 geoid_filter=self.geoid_filter,
                 geoid_col=self.geoid_col,
+                date_col=self.date_col,
             )
 
         return self._cache[year_key]
