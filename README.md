@@ -57,10 +57,10 @@ uv run python gui_app.py
 ```
 
 The GUI provides a step-by-step wizard for:
-1. Selecting HRS survey data and date columns
-2. Configuring optional residential history
-3. Selecting and validating contextual data directories
-4. Setting pipeline parameters
+1. Selecting HRS survey data with dropdown selection for ID column, date column, and GEOID column
+2. Configuring optional residential history with dynamic dropdown population from data
+3. Selecting and validating contextual data directories with file name filtering and column selection
+4. Setting pipeline parameters (number of lags, parallel processing)
 5. Running the pipeline with real-time progress monitoring
 
 See [linkdata/gui/README.md](linkdata/gui/README.md) for detailed GUI documentation.
@@ -76,8 +76,10 @@ python link_lags.py \
     --output_name "HRSHeatLinked.dta" \
     --id-col hhidpn \
     --date-col iwdate \
+    --geoid-col LINKCEN2010 \
     --measure-type heat_index \
     --data-col HeatIndex \
+    --contextual-geoid-col GEOID10 \
     --n-lags 365 \
     --save-dir "path/to/output" \
     --parallel
@@ -101,8 +103,10 @@ python link_lags.py \
     --output_name "HRSHeatLinked.dta" \
     --id-col hhidpn \
     --date-col iwdate \
+    --geoid-col LINKCEN2010 \
     --measure-type heat_index \
     --data-col HeatIndex \
+    --contextual-geoid-col GEOID10 \
     --n-lags 365 \
     --save-dir "path/to/output" \
     --parallel
@@ -123,11 +127,11 @@ python link_lags.py \
 
 - `--output_name`: Output filename (default: linked_data.dta)
 - `--data-col`: Explicit data column name (overrides measure type inference)
-- `--geoid-col`: GEOID column name in contextual data (default: GEOID10)
+- `--geoid-col`: GEOID column name in HRS data (default: LINKCEN2010)
+- `--contextual-geoid-col`: GEOID column name in contextual data files (default: GEOID10)
 - `--file-extension`: File extension to search for (e.g., .csv, .parquet)
 - `--n-lags`: Number of lag days to compute (default: 365)
 - `--parallel`: Enable parallel processing
-- `--geoid-prefix`: Prefix for GEOID columns (default: LINKCEN)
 - `--include-lag-date`: Include lag date columns in output
 
 ### Residential History Arguments
@@ -187,6 +191,8 @@ python link_lags.py \
     --data-col HeatIndex \
     --id-col hhidpn \
     --date-col iwdate \
+    --geoid-col LINKCEN2010 \
+    --contextual-geoid-col GEOID10 \
     --n-lags 365 \
     --save-dir "output/heat" \
     --parallel
@@ -202,6 +208,8 @@ python link_lags.py \
     --measure-type pm25 \
     --id-col hhidpn \
     --date-col iwdate \
+    --geoid-col LINKCEN2010 \
+    --contextual-geoid-col GEOID10 \
     --n-lags 730 \
     --save-dir "output/pm25" \
     --parallel
@@ -218,15 +226,18 @@ python link_lags.py \
 ### HRS Survey Data
 - Format: Stata (.dta) file
 - Required columns:
-  - Unique participant ID
-  - Date column (interview/collection date)
-  - GEOID columns (census tract identifiers)
+  - Unique participant ID (selectable via dropdown in GUI or `--id-col` in CLI)
+  - Date column (interview/collection date, selectable via `--date-col`)
+  - GEOID column (census tract identifier, selectable via `--geoid-col`)
 
 ### Contextual Data Files
 - Format: CSV, Stata, Parquet, Feather, or Excel
 - Naming: Must include 4-digit year (e.g., `heat_2016.csv`)
 - Structure: Long format with date, GEOID, and measure columns
+  - Date column (selectable via dropdown in GUI or defaults to "Date")
+  - GEOID column (selectable via `--contextual-geoid-col`, default: GEOID10)
 - Consistency: All files must have identical column names
+- File filtering: Use `--measure-type` to select files containing specific substrings
 
 ### Residential History (Optional)
 - Format: Stata (.dta) file
