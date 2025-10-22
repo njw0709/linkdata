@@ -107,12 +107,19 @@ class ResidentialHistoryHRS:
         """
         Returns a Series of GEOIDs aligned with hhidpn_series,
         based on the move history and the provided dates.
+
+        If a person ID is not found in the residential history,
+        returns NaN for that person's GEOID.
         """
         assert len(hhidpn_series) == len(date_series)
         geoids = []
         for pid, dt in zip(hhidpn_series, date_series):
-            move_dates, move_geoids = self._move_info[pid]
-            geoids.append(self._find_geoid_for_date(dt, move_dates, move_geoids))
+            if pid not in self._move_info:
+                # Person not found in residential history - return NaN
+                geoids.append(None)
+            else:
+                move_dates, move_geoids = self._move_info[pid]
+                geoids.append(self._find_geoid_for_date(dt, move_dates, move_geoids))
         return pd.Series(geoids, index=hhidpn_series.index, dtype="string")
 
 
