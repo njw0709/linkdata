@@ -691,7 +691,32 @@ def run_pipeline(args: argparse.Namespace):
         lag_df = pd.read_parquet(f)
         final_df = final_df.merge(lag_df, on=args.id_col, how="left")
 
-    # Save final dataset
+    # Convert GEOID columns to numeric (for all formats) after merge, before save
+    try:
+        base_geoid = args.geoid_col
+        geoid_cols = [
+            c
+            for c in final_df.columns
+            if c == base_geoid
+            or (c.startswith(f"{base_geoid}_") and c.endswith("day_prior"))
+        ]
+
+        for col in geoid_cols:
+            series = (
+                final_df[col]
+                .astype("string")
+                .str.replace(r"\D", "", regex=True)
+                .replace({"": pd.NA})
+            )
+            numeric = pd.to_numeric(series, errors="coerce")
+            if numeric.isna().any():
+                final_df[col] = numeric.astype("Int64")
+            else:
+                final_df[col] = numeric.astype("int64")
+    except Exception as e:
+        print(f"Warning: failed to convert GEOID columns to numeric: {e}")
+
+    # Save final dataset (use centralized writer for dtype conversion/sanitation)
     print(f"Saving final dataset to {out_path}")
-    final_df.to_stata(out_path)
+    write_data(final_df, out_path)
     print("Done.")

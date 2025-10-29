@@ -141,20 +141,38 @@ def write_data(
     # Get file extension (lowercase, without dot)
     ext = file_path.suffix.lower().lstrip(".")
 
+    # Prepare a defensive copy for sanitation across all formats
+    out_df = df.copy()
+
     # Map extension to pandas write function
     if ext == "csv":
-        df.to_csv(file_path, **kwargs)
+        out_df.to_csv(file_path, **kwargs)
     elif ext == "dta":
         # Stata doesn't support index writing, so we don't pass it
         # Remove index parameter if it was passed
         write_kwargs = {k: v for k, v in kwargs.items() if k != "index"}
-        df.to_stata(file_path, **write_kwargs)
+
+        # 2) Stata-specific sanitation: ensure object/string cols are string-or-None only
+        #    and convert categoricals to object strings
+        for name in out_df.columns:
+            col = out_df[name]
+            if pd.api.types.is_categorical_dtype(col):
+                out_df[name] = col.astype("string").astype(object)
+            elif pd.api.types.is_string_dtype(col):
+                # Convert pandas StringDtype to Python objects (str or None)
+                out_df[name] = col.astype(object).where(~col.isna(), None)
+            elif pd.api.types.is_object_dtype(col):
+                # Replace pandas NA with None and ensure values are string-like or None
+                series_obj = col.where(~pd.isna(col), None)
+                out_df[name] = series_obj
+
+        out_df.to_stata(file_path, **write_kwargs)
     elif ext in ("parquet", "pq"):
-        df.to_parquet(file_path, **kwargs)
+        out_df.to_parquet(file_path, **kwargs)
     elif ext == "feather":
-        df.to_feather(file_path, **kwargs)
+        out_df.to_feather(file_path, **kwargs)
     elif ext in ("xlsx", "xls"):
-        df.to_excel(file_path, **kwargs)
+        out_df.to_excel(file_path, **kwargs)
     else:
         raise ValueError(
             f"Unsupported file format: '.{ext}'. "
