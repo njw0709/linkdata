@@ -216,7 +216,12 @@ class ExecutionPage(QWizardPage):
             args.res_hist_moved_mark = wizard.field("res_hist_moved_mark")
             args.res_hist_geoid = wizard.field("res_hist_geoid")
             args.res_hist_survey_yr_col = wizard.field("res_hist_survey_yr_col")
-            args.res_hist_first_tract_mark = wizard.field("res_hist_first_tract_mark")
+            # Convert first tract mark to float to match CLI behavior
+            _first_mark = wizard.field("res_hist_first_tract_mark")
+            try:
+                args.res_hist_first_tract_mark = float(_first_mark)
+            except (TypeError, ValueError):
+                args.res_hist_first_tract_mark = _first_mark
         else:
             args.residential_hist = None
 
