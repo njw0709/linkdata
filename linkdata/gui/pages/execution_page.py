@@ -5,6 +5,7 @@ Pipeline execution page.
 import argparse
 import sys
 from pathlib import Path
+import re
 
 from PyQt6.QtWidgets import (
     QWizardPage,
@@ -20,6 +21,33 @@ from PyQt6.QtCore import QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 
 from linkdata.process import run_pipeline
+
+
+# Regex to remove most emoji code points while preserving non-emoji Unicode
+EMOJI_PATTERN = re.compile(
+    "[\U0001f600-\U0001f64f"  # emoticons
+    "\U0001f300-\U0001f5ff"  # symbols & pictographs
+    "\U0001f680-\U0001f6ff"  # transport & map
+    "\U0001f1e0-\U0001f1ff"  # flags
+    "\U00002702-\U000027b0"  # dingbats
+    "\U000024c2-\U0001f251"  # enclosed characters
+    "\U0001f900-\U0001f9ff"  # supplemental symbols & pictographs
+    "\U0001fa70-\U0001faff"  # extended-A
+    "\U00002600-\U000026ff"  # misc symbols
+    "\U00002300-\U000023ff"  # misc technical
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def remove_emojis(text: str) -> str:
+    """Remove emoji-related code points from text.
+
+    Keeps regular Unicode letters/numbers; strips common emoji ranges,
+    zero-width joiner and variation selector.
+    """
+    text = text.replace("\u200d", "").replace("\ufe0f", "")
+    return EMOJI_PATTERN.sub("", text)
 
 
 class OutputRedirector:
@@ -264,8 +292,10 @@ class ExecutionPage(QWizardPage):
 
         if file_path:
             try:
-                with open(file_path, "w") as f:
-                    f.write(self.output_text.toPlainText())
+                text = self.output_text.toPlainText()
+                text = remove_emojis(text)
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(text)
                 QMessageBox.information(self, "Saved", f"Log saved to {file_path}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save log: {str(e)}")
