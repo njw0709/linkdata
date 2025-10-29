@@ -68,6 +68,8 @@ class ResidentialHistoryHRS:
             ]
             if first_rows.empty:
                 print("debug: first row not found!")
+                print(f"df: {df_person.head()}")
+                print(f"pid: {pid}")
                 continue
             first = first_rows.iloc[0]
             if not pd.isna(first[self.mvyear]):
@@ -93,11 +95,11 @@ class ResidentialHistoryHRS:
                 geoids.append(str(row[self.geoid]).zfill(11))
 
             move_info[pid] = (dates, geoids)
-        debug = self.debug_move_info(n_samples=100)
+        debug = self.debug_move_info(move_info, n_samples=100)
         print("Residential history parsed! Debug: {}".format(debug))
         return move_info
 
-    def debug_move_info(self, n_samples: int = 5) -> dict:
+    def debug_move_info(self, move_info, n_samples: int = 5) -> dict:
         """
         Inspect _move_info contents for debugging.
 
@@ -107,16 +109,14 @@ class ResidentialHistoryHRS:
         - sample_keys: sample of keys
         - sample_entries: sample entries with dates/geoids
         """
-        if not self._move_info:
-            return {"error": "_move_info is empty"}
 
-        keys = list(self._move_info.keys())
+        keys = list(move_info.keys())
         key_types = set(type(k).__name__ for k in keys)
 
         sample_keys = keys[:n_samples]
         sample_entries = {}
         for key in sample_keys:
-            dates, geoids = self._move_info[key]
+            dates, geoids = move_info[key]
             sample_entries[key] = {
                 "num_dates": len(dates),
                 "first_date": str(dates[0]) if dates else None,
