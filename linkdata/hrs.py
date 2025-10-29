@@ -264,7 +264,7 @@ class HRSInterviewData:
 
     def get_geoid_based_on_date(self, date_series: pd.Series) -> pd.Series:
         return self.residential_hist.create_geoid_based_on_date(
-            self.df[self.hhidpn], date_series
+            self.df[self.hhidpn], date_series, debug=True
         )
 
     def save(self, save_name: Union[str, Path]) -> None:
