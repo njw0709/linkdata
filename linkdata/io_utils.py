@@ -20,8 +20,19 @@ import pandas as pd
 import numpy as np
 
 
-# Helper: sanitize DataFrame for CSV/Excel (string-friendly, Excel-safe)
-def _sanitize_for_tabular(input_df: pd.DataFrame) -> pd.DataFrame:
+# Helper: sanitize DataFrame for CSV/Excel/Stata exports
+def _sanitize_for_tabular(input_df: pd.DataFrame, mode: str = "string") -> pd.DataFrame:
+    """
+    Sanitize DataFrame for export to tabular formats.
+
+    Parameters
+    ----------
+    input_df : pd.DataFrame
+        Input DataFrame to sanitize
+    mode : str, default "string"
+        - "string": Convert all values to strings (for CSV/Excel)
+        - "preserve": Keep numeric types, only fix problematic types (for Stata)
+    """
     sanitized = input_df.copy()
 
     # Handle categoricals early to avoid downstream surprises
@@ -30,13 +41,13 @@ def _sanitize_for_tabular(input_df: pd.DataFrame) -> pd.DataFrame:
         if pd.api.types.is_categorical_dtype(col):
             sanitized[col_name] = col.astype("string").astype(object)
 
-    # Datetime -> local-naive ISO strings (YYYY-MM-DDTHH:MM:SS)
+    # Datetime handling
     for col_name in sanitized.columns:
         col = sanitized[col_name]
         if pd.api.types.is_datetime64_any_dtype(col):
             series = col
             try:
-                # If timezone-aware, drop tz info (local naive). We avoid external deps.
+                # If timezone-aware, drop tz info (local naive)
                 if getattr(series.dt, "tz", None) is not None:
                     series = series.dt.tz_localize(None)
             except Exception:
@@ -44,39 +55,57 @@ def _sanitize_for_tabular(input_df: pd.DataFrame) -> pd.DataFrame:
                 series = pd.to_datetime(series, errors="coerce")
                 series = series.dt.tz_localize(None)
 
-            sanitized[col_name] = series.dt.strftime("%Y-%m-%dT%H:%M:%S")
+            if mode == "preserve":
+                # Keep as datetime for Stata (Stata supports datetime)
+                sanitized[col_name] = series
+            else:
+                # Convert to ISO string for CSV/Excel
+                sanitized[col_name] = series.dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Timedelta -> total seconds (as string)
+    # Timedelta handling
     for col_name in sanitized.columns:
         col = sanitized[col_name]
         if pd.api.types.is_timedelta64_dtype(col):
             total_seconds = col.dt.total_seconds()
-            # Keep integers when possible, else use float
-            # Represent as strings to avoid Excel auto-format oddities
-            as_int = total_seconds % 1 == 0
-            sanitized[col_name] = np.where(
-                as_int,
-                total_seconds.astype("Int64").astype(object),
-                total_seconds.astype(float),
-            ).astype(str)
+            if mode == "preserve":
+                # Keep as numeric for Stata
+                as_int = total_seconds % 1 == 0
+                sanitized[col_name] = np.where(
+                    as_int, total_seconds.astype("Int64"), total_seconds.astype(float)
+                )
+            else:
+                # Convert to string for CSV/Excel
+                as_int = total_seconds % 1 == 0
+                sanitized[col_name] = np.where(
+                    as_int,
+                    total_seconds.astype("Int64").astype(object),
+                    total_seconds.astype(float),
+                ).astype(str)
 
-    # Booleans -> '0' / '1'
+    # Booleans handling
     for col_name in sanitized.columns:
         col = sanitized[col_name]
         if pd.api.types.is_bool_dtype(col):
-            sanitized[col_name] = col.astype(int).astype(str)
+            if mode == "preserve":
+                # Keep as int for Stata (0/1 numeric)
+                sanitized[col_name] = col.astype(int)
+            else:
+                # Convert to string for CSV/Excel
+                sanitized[col_name] = col.astype(int).astype(str)
 
     # Object columns: coerce element-wise
-    def _coerce_object_value(value: Any) -> Any:
+    def _coerce_object_value(value: Any, as_string: bool = True) -> Any:
         if value is None or (isinstance(value, float) and pd.isna(value)):
             return None
-        # Keep primitives that are already CSV/Excel-safe
+        # Keep primitives that are already safe
         if isinstance(value, (str, int, float)):
             return value
         if isinstance(value, (np.integer, np.floating)):
             return value.item()
         if isinstance(value, (bool, np.bool_)):
-            return "1" if bool(value) else "0"
+            return (
+                "1" if bool(value) else "0" if as_string else (1 if bool(value) else 0)
+            )
         if isinstance(value, (bytes, bytearray)):
             try:
                 return bytes(value).decode("utf-8", errors="replace")
@@ -91,7 +120,10 @@ def _sanitize_for_tabular(input_df: pd.DataFrame) -> pd.DataFrame:
     for col_name in sanitized.columns:
         col = sanitized[col_name]
         if pd.api.types.is_object_dtype(col):
-            sanitized[col_name] = col.map(_coerce_object_value)
+            as_string = mode != "preserve"
+            sanitized[col_name] = col.map(
+                lambda v: _coerce_object_value(v, as_string=as_string)
+            )
 
     return sanitized
 
@@ -233,21 +265,17 @@ def write_data(
         # Remove index parameter if it was passed
         write_kwargs = {k: v for k, v in kwargs.items() if k != "index"}
 
-        # 2) Stata-specific sanitation: ensure object/string cols are string-or-None only
-        #    and convert categoricals to object strings
-        for name in out_df.columns:
-            col = out_df[name]
-            if pd.api.types.is_categorical_dtype(col):
-                out_df[name] = col.astype("string").astype(object)
-            elif pd.api.types.is_string_dtype(col):
-                # Convert pandas StringDtype to Python objects (str or None)
-                out_df[name] = col.astype(object).where(~col.isna(), None)
-            elif pd.api.types.is_object_dtype(col):
-                # Replace pandas NA with None and ensure values are string-like or None
-                series_obj = col.where(~pd.isna(col), None)
-                out_df[name] = series_obj
+        # Apply sanitation for Stata with type preservation
+        sanitized_df = _sanitize_for_tabular(out_df, mode="preserve")
 
-        out_df.to_stata(file_path, **write_kwargs)
+        # Additional Stata-specific pass: ensure all object columns are truly string-or-None
+        for name in sanitized_df.columns:
+            col = sanitized_df[name]
+            if pd.api.types.is_object_dtype(col):
+                # Convert all values to str (or None for missing)
+                sanitized_df[name] = col.astype(object).where(~pd.isna(col), None)
+
+        sanitized_df.to_stata(file_path, **write_kwargs)
     elif ext in ("parquet", "pq"):
         out_df.to_parquet(file_path, **kwargs)
     elif ext == "feather":

@@ -42,9 +42,11 @@ class ResidentialHistoryHRS:
 
         # Load only once (file read can be expensive)
         self.df = read_data(self.filename)
-        # Normalize identifier type to string to ensure consistent keying
+        # Normalize identifier type to integer (nullable) for consistent keying
         if self.hhidpn in self.df.columns:
-            self.df[self.hhidpn] = self.df[self.hhidpn].astype(str)
+            self.df[self.hhidpn] = pd.to_numeric(
+                self.df[self.hhidpn], errors="coerce"
+            ).astype("Int64")
         self._move_info = self._parse_move_info()
 
     def _parse_move_info(self) -> Dict[str, tuple[list[pd.Timestamp], list[str]]]:
@@ -54,8 +56,8 @@ class ResidentialHistoryHRS:
         print("📌 Parsing residential move history...")
         move_info = {}
         for pid, df_person in tqdm(self.df.groupby(self.hhidpn)):
-            # Ensure pid keys are strings
-            pid = str(pid)
+            # Ensure pid keys are Python ints
+            pid = int(pid)
             dates, geoids = [], []
 
             # First tract
@@ -118,12 +120,18 @@ class ResidentialHistoryHRS:
         """
         assert len(hhidpn_series) == len(date_series)
         geoids = []
-        for pid, dt in zip(hhidpn_series.astype(str), date_series):
-            if pid not in self._move_info:
+        # Ensure lookup series is integer-typed (nullable) to match keys
+        pid_series_int = pd.to_numeric(hhidpn_series, errors="coerce").astype("Int64")
+        for pid, dt in zip(pid_series_int, date_series):
+            if pd.isna(pid):
+                geoids.append(None)
+                continue
+            pid_key = int(pid)
+            if pid_key not in self._move_info:
                 # Person not found in residential history - return NaN
                 geoids.append(None)
             else:
-                move_dates, move_geoids = self._move_info[pid]
+                move_dates, move_geoids = self._move_info[pid_key]
                 geoids.append(self._find_geoid_for_date(dt, move_dates, move_geoids))
         return pd.Series(geoids, index=hhidpn_series.index, dtype="string")
 
@@ -158,9 +166,11 @@ class HRSInterviewData:
         self.residential_hist = residential_hist
         self.geoid_col = geoid_col
 
-        # Normalize identifier type to string for consistent joins/lookups
+        # Normalize identifier type to integer (nullable) for consistent joins/lookups
         if self.hhidpn in self.df.columns:
-            self.df[self.hhidpn] = self.df[self.hhidpn].astype(str)
+            self.df[self.hhidpn] = pd.to_numeric(
+                self.df[self.hhidpn], errors="coerce"
+            ).astype("Int64")
 
         # Format the GEOID column if it exists and no residential history
         if not move and geoid_col in self.columns:
