@@ -8,6 +8,39 @@ from .daily_measure import DailyMeasureDataDir
 from .io_utils import write_data
 
 
+def convert_geoid_columns_to_string(
+    df: pd.DataFrame, geoid_cols: List[str]
+) -> pd.DataFrame:
+    """
+    Convert GEOID columns to zero-padded 11-digit strings.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing GEOID columns
+    geoid_cols : List[str]
+        List of GEOID column names to convert
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with GEOID columns converted to strings
+    """
+    df = df.copy()
+    for col in geoid_cols:
+        if col in df.columns:
+            # Convert to string, strip non-digits, zero-pad to 11 digits
+            # Missing values become empty strings
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(r"\D", "", regex=True)
+                .replace({"nan": "", "None": "", "<NA>": ""})
+                .apply(lambda x: x.zfill(11) if x else "")
+            )
+    return df
+
+
 def compute_required_years(
     hrs_data: HRSInterviewData,
     max_lag_days: int,
@@ -202,6 +235,12 @@ def process_multiple_lags_batch(
         # Skip if no valid data
         if out_df.shape[1] <= 1:
             continue
+
+        # Convert GEOID columns to strings before saving
+        if geoid_col is None:
+            geoid_col = hrs_data.geoid_col
+        temp_geoid_cols = [c for c in out_df.columns if geoid_col in c]
+        out_df = convert_geoid_columns_to_string(out_df, temp_geoid_cols)
 
         # Save to temp file
         filename = f"{prefix}_lag_{n:04d}.{file_format}"
@@ -544,6 +583,12 @@ def _process_single_lag_internal(
         if out_df.shape[1] <= 1:
             return None
 
+        # Convert GEOID columns to strings before saving
+        if geoid_col is None:
+            geoid_col = hrs_data.geoid_col
+        temp_geoid_cols = [c for c in out_df.columns if geoid_col in c]
+        out_df = convert_geoid_columns_to_string(out_df, temp_geoid_cols)
+
         filename = f"{prefix}_lag_{n:04d}.{file_format}"
         temp_file = temp_dir / filename
 
@@ -694,30 +739,15 @@ def run_pipeline(args: argparse.Namespace):
         lag_df = pd.read_parquet(f)
         final_df = final_df.merge(lag_df, on=args.id_col, how="left")
 
-    # Convert GEOID columns to numeric (for all formats) after merge, before save
-    try:
-        base_geoid = args.geoid_col
-        geoid_cols = [
-            c
-            for c in final_df.columns
-            if c == base_geoid
-            or (c.startswith(f"{base_geoid}_") and c.endswith("day_prior"))
-        ]
-
-        for col in geoid_cols:
-            series = (
-                final_df[col]
-                .astype("string")
-                .str.replace(r"\D", "", regex=True)
-                .replace({"": pd.NA})
-            )
-            numeric = pd.to_numeric(series, errors="coerce")
-            if numeric.isna().any():
-                final_df[col] = numeric.astype("Int64")
-            else:
-                final_df[col] = numeric.astype("int64")
-    except Exception as e:
-        print(f"Warning: failed to convert GEOID columns to numeric: {e}")
+    # Convert GEOID columns to strings before saving
+    base_geoid = args.geoid_col
+    geoid_cols = [
+        c
+        for c in final_df.columns
+        if c == base_geoid
+        or (c.startswith(f"{base_geoid}_") and c.endswith("day_prior"))
+    ]
+    final_df = convert_geoid_columns_to_string(final_df, geoid_cols)
 
     # Save final dataset (use centralized writer for dtype conversion/sanitation)
     print(f"Saving final dataset to {out_path}")

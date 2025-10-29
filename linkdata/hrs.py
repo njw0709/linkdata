@@ -68,7 +68,7 @@ class ResidentialHistoryHRS:
             ]
             if first_rows.empty:
                 print("debug: first row not found!")
-                print(f"df: {df_person.head()}")
+                print(df_person.head())
                 print(f"pid: {pid}")
                 continue
             first = first_rows.iloc[0]
@@ -95,11 +95,11 @@ class ResidentialHistoryHRS:
                 geoids.append(str(row[self.geoid]).zfill(11))
 
             move_info[pid] = (dates, geoids)
-        debug = self.debug_move_info(move_info, n_samples=100)
+        debug = self.debug_move_info(move_info)
         print("Residential history parsed! Debug: {}".format(debug))
         return move_info
 
-    def debug_move_info(self, move_info, n_samples: int = 5) -> dict:
+    def debug_move_info(self, move_info) -> dict:
         """
         Inspect _move_info contents for debugging.
 
@@ -113,23 +113,9 @@ class ResidentialHistoryHRS:
         keys = list(move_info.keys())
         key_types = set(type(k).__name__ for k in keys)
 
-        sample_keys = keys[:n_samples]
-        sample_entries = {}
-        for key in sample_keys:
-            dates, geoids = move_info[key]
-            sample_entries[key] = {
-                "num_dates": len(dates),
-                "first_date": str(dates[0]) if dates else None,
-                "last_date": str(dates[-1]) if dates else None,
-                "first_geoid": geoids[0] if geoids else None,
-                "last_geoid": geoids[-1] if geoids else None,
-            }
-
         return {
             "key_count": len(keys),
             "key_types": list(key_types),
-            "sample_keys": sample_keys,
-            "sample_entries": sample_entries,
         }
 
     @staticmethod
@@ -264,11 +250,26 @@ class HRSInterviewData:
 
     def get_geoid_based_on_date(self, date_series: pd.Series) -> pd.Series:
         return self.residential_hist.create_geoid_based_on_date(
-            self.df[self.hhidpn], date_series, debug=True
+            self.df[self.hhidpn],
+            date_series,
         )
 
     def save(self, save_name: Union[str, Path]) -> None:
-        write_data(self.df, save_name)
+        # Convert GEOID columns to zero-padded strings before saving
+        geoid_cols = [c for c in self.df.columns if self.geoid_col in c]
+        df_to_save = self.df.copy()
+        for col in geoid_cols:
+            if col in df_to_save.columns:
+                # Convert to string, strip non-digits, zero-pad to 11 digits
+                # Missing values become empty strings
+                df_to_save[col] = (
+                    df_to_save[col]
+                    .astype(str)
+                    .str.replace(r"\D", "", regex=True)
+                    .replace({"nan": "", "None": "", "<NA>": ""})
+                    .apply(lambda x: x.zfill(11) if x else "")
+                )
+        write_data(df_to_save, save_name)
 
 
 # ---------------------------------------------------------------------
