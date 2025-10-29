@@ -682,8 +682,11 @@ def run_pipeline(args: argparse.Namespace):
     print(f"Merging {len(temp_files)} lag outputs with main HRS data...")
     final_df = hrs_epi_data.df.copy()
 
-    # Extract lag number from filename and sort
-    temp_files.sort(key=lambda f: int(f.stem.split("_lag_")[1].split(".")[0]))
+    # Filter files to current measure type (prefix) to avoid leftovers, then sort by lag
+    temp_files = [
+        f for f in temp_files if f.stem.startswith(f"{args.measure_type}_lag_")
+    ]
+    temp_files.sort(key=lambda f: int(f.stem.split("_lag_")[1]))
 
     for i, f in enumerate(temp_files):
         if (i + 1) % 100 == 0:
