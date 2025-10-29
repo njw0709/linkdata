@@ -67,6 +67,7 @@ class ResidentialHistoryHRS:
                 | (df_person[self.movecol] == str(self.first_tract_mark))
             ]
             if first_rows.empty:
+                print("debug: first row not found!")
                 continue
             first = first_rows.iloc[0]
             if not pd.isna(first[self.mvyear]):
@@ -92,7 +93,8 @@ class ResidentialHistoryHRS:
                 geoids.append(str(row[self.geoid]).zfill(11))
 
             move_info[pid] = (dates, geoids)
-
+        debug = self.debug_move_info(move_info, n_samples=100)
+        print("Residential history parsed! Debug: {}".format(debug))
         return move_info
 
     def debug_move_info(self, n_samples: int = 5) -> dict:
