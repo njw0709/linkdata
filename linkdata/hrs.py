@@ -49,7 +49,7 @@ class ResidentialHistoryHRS:
             ).astype("Int64")
         self._move_info = self._parse_move_info()
 
-    def _parse_move_info(self) -> Dict[str, tuple[list[pd.Timestamp], list[str]]]:
+    def _parse_move_info(self) -> Dict[int, tuple[list[pd.Timestamp], list[str]]]:
         """
         Builds a dict mapping hhidpn → (list of move dates, list of corresponding GEOIDs)
         """
@@ -60,8 +60,12 @@ class ResidentialHistoryHRS:
             pid = int(pid)
             dates, geoids = [], []
 
-            # First tract
-            first_rows = df_person[df_person[self.movecol] == self.first_tract_mark]
+            # First tract - handle both numeric and string comparison
+            # (column may be object dtype if mixed with strings)
+            first_rows = df_person[
+                (df_person[self.movecol] == self.first_tract_mark)
+                | (df_person[self.movecol] == str(self.first_tract_mark))
+            ]
             if first_rows.empty:
                 continue
             first = first_rows.iloc[0]
@@ -91,6 +95,41 @@ class ResidentialHistoryHRS:
 
         return move_info
 
+    def debug_move_info(self, n_samples: int = 5) -> dict:
+        """
+        Inspect _move_info contents for debugging.
+
+        Returns dict with:
+        - key_count: number of keys in _move_info
+        - key_types: types of keys
+        - sample_keys: sample of keys
+        - sample_entries: sample entries with dates/geoids
+        """
+        if not self._move_info:
+            return {"error": "_move_info is empty"}
+
+        keys = list(self._move_info.keys())
+        key_types = set(type(k).__name__ for k in keys)
+
+        sample_keys = keys[:n_samples]
+        sample_entries = {}
+        for key in sample_keys:
+            dates, geoids = self._move_info[key]
+            sample_entries[key] = {
+                "num_dates": len(dates),
+                "first_date": str(dates[0]) if dates else None,
+                "last_date": str(dates[-1]) if dates else None,
+                "first_geoid": geoids[0] if geoids else None,
+                "last_geoid": geoids[-1] if geoids else None,
+            }
+
+        return {
+            "key_count": len(keys),
+            "key_types": list(key_types),
+            "sample_keys": sample_keys,
+            "sample_entries": sample_entries,
+        }
+
     @staticmethod
     def _find_geoid_for_date(
         dt: pd.Timestamp, move_dates: list[pd.Timestamp], move_geoids: list[str]
@@ -109,7 +148,7 @@ class ResidentialHistoryHRS:
         return move_geoids[-1]
 
     def create_geoid_based_on_date(
-        self, hhidpn_series: pd.Series, date_series: pd.Series
+        self, hhidpn_series: pd.Series, date_series: pd.Series, debug: bool = False
     ) -> pd.Series:
         """
         Returns a Series of GEOIDs aligned with hhidpn_series,
@@ -117,11 +156,52 @@ class ResidentialHistoryHRS:
 
         If a person ID is not found in the residential history,
         returns NaN for that person's GEOID.
+
+        Parameters
+        ----------
+        hhidpn_series : pd.Series
+            Series of person IDs
+        date_series : pd.Series
+            Series of dates to look up GEOIDs for
+        debug : bool, optional
+            If True, print debug information about the lookup process
         """
         assert len(hhidpn_series) == len(date_series)
         geoids = []
         # Ensure lookup series is integer-typed (nullable) to match keys
         pid_series_int = pd.to_numeric(hhidpn_series, errors="coerce").astype("Int64")
+
+        if debug:
+            print(f"🔍 Debug Info for create_geoid_based_on_date:")
+            print(
+                f"  Input PIDs: {len(hhidpn_series)} total, {pid_series_int.nunique()} unique"
+            )
+            print(f"  _move_info keys: {len(self._move_info)} total")
+            print(
+                f"  Key types in _move_info: {set(type(k).__name__ for k in list(self._move_info.keys())[:5])}"
+            )
+            print(f"  Sample input PIDs (first 5): {list(pid_series_int[:5])}")
+            print(
+                f"  Sample _move_info keys (first 5): {list(self._move_info.keys())[:5]}"
+            )
+
+            # Check how many PIDs will be found
+            found_count = sum(
+                1
+                for pid in pid_series_int
+                if not pd.isna(pid) and int(pid) in self._move_info
+            )
+            print(f"  PIDs that will be found: {found_count}/{len(pid_series_int)}")
+
+            # Sample of PIDs not found
+            not_found_pids = [
+                int(pid)
+                for pid in pid_series_int[:10]
+                if not pd.isna(pid) and int(pid) not in self._move_info
+            ]
+            if not_found_pids:
+                print(f"  Sample PIDs not found (first 5): {not_found_pids[:5]}")
+
         for pid, dt in zip(pid_series_int, date_series):
             if pd.isna(pid):
                 geoids.append(None)
@@ -165,6 +245,10 @@ class HRSInterviewData:
         self.move = move
         self.residential_hist = residential_hist
         self.geoid_col = geoid_col
+
+        # Normalize date column to datetime
+        if datecol in self.df.columns:
+            self.df[datecol] = pd.to_datetime(self.df[datecol], errors="coerce")
 
         # Normalize identifier type to integer (nullable) for consistent joins/lookups
         if self.hhidpn in self.df.columns:

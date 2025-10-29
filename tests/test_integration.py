@@ -93,7 +93,7 @@ def test_hrs_context_linker_geoid_assignment(survey_with_residential_history):
         survey_with_residential_history, colname
     )
 
-    assert geoid_colname == "LINKCEN_14day_prior"
+    assert geoid_colname == "LINKCEN2010_14day_prior"
     assert geoid_colname in survey_with_residential_history.df.columns
 
     # Test that GEOIDs are properly formatted
