@@ -110,6 +110,9 @@ class ExecutionPage(QWizardPage):
         button_layout = QHBoxLayout()
 
         self.run_button = QPushButton("Run Pipeline")
+        self.run_button.setStyleSheet(
+            "background-color: #4CAF50; color: white; font-weight: bold;"
+        )
         self.run_button.clicked.connect(self._run_pipeline)
         button_layout.addWidget(self.run_button)
 

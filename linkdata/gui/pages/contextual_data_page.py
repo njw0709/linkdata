@@ -165,7 +165,7 @@ class ContextualDataPage(QWizardPage):
         columns_layout = QFormLayout()
 
         self.data_col_combo = QComboBox()
-        columns_layout.addRow("Data Column:", self.data_col_combo)
+        columns_layout.addRow("Contextual Data Column:", self.data_col_combo)
 
         self.geoid_col_combo = QComboBox()
         columns_layout.addRow("GEOID Column:", self.geoid_col_combo)
