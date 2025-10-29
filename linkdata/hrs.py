@@ -42,6 +42,9 @@ class ResidentialHistoryHRS:
 
         # Load only once (file read can be expensive)
         self.df = read_data(self.filename)
+        # Normalize identifier type to string to ensure consistent keying
+        if self.hhidpn in self.df.columns:
+            self.df[self.hhidpn] = self.df[self.hhidpn].astype(str)
         self._move_info = self._parse_move_info()
 
     def _parse_move_info(self) -> Dict[str, tuple[list[pd.Timestamp], list[str]]]:
@@ -51,6 +54,8 @@ class ResidentialHistoryHRS:
         print("📌 Parsing residential move history...")
         move_info = {}
         for pid, df_person in tqdm(self.df.groupby(self.hhidpn)):
+            # Ensure pid keys are strings
+            pid = str(pid)
             dates, geoids = [], []
 
             # First tract
@@ -113,7 +118,7 @@ class ResidentialHistoryHRS:
         """
         assert len(hhidpn_series) == len(date_series)
         geoids = []
-        for pid, dt in zip(hhidpn_series, date_series):
+        for pid, dt in zip(hhidpn_series.astype(str), date_series):
             if pid not in self._move_info:
                 # Person not found in residential history - return NaN
                 geoids.append(None)
@@ -152,6 +157,10 @@ class HRSInterviewData:
         self.move = move
         self.residential_hist = residential_hist
         self.geoid_col = geoid_col
+
+        # Normalize identifier type to string for consistent joins/lookups
+        if self.hhidpn in self.df.columns:
+            self.df[self.hhidpn] = self.df[self.hhidpn].astype(str)
 
         # Format the GEOID column if it exists and no residential history
         if not move and geoid_col in self.columns:
