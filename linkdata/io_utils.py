@@ -17,6 +17,83 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 import pandas as pd
+import numpy as np
+
+
+# Helper: sanitize DataFrame for CSV/Excel (string-friendly, Excel-safe)
+def _sanitize_for_tabular(input_df: pd.DataFrame) -> pd.DataFrame:
+    sanitized = input_df.copy()
+
+    # Handle categoricals early to avoid downstream surprises
+    for col_name in sanitized.columns:
+        col = sanitized[col_name]
+        if pd.api.types.is_categorical_dtype(col):
+            sanitized[col_name] = col.astype("string").astype(object)
+
+    # Datetime -> local-naive ISO strings (YYYY-MM-DDTHH:MM:SS)
+    for col_name in sanitized.columns:
+        col = sanitized[col_name]
+        if pd.api.types.is_datetime64_any_dtype(col):
+            series = col
+            try:
+                # If timezone-aware, drop tz info (local naive). We avoid external deps.
+                if getattr(series.dt, "tz", None) is not None:
+                    series = series.dt.tz_localize(None)
+            except Exception:
+                # Fallback: attempt to convert to datetime then drop tz
+                series = pd.to_datetime(series, errors="coerce")
+                series = series.dt.tz_localize(None)
+
+            sanitized[col_name] = series.dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    # Timedelta -> total seconds (as string)
+    for col_name in sanitized.columns:
+        col = sanitized[col_name]
+        if pd.api.types.is_timedelta64_dtype(col):
+            total_seconds = col.dt.total_seconds()
+            # Keep integers when possible, else use float
+            # Represent as strings to avoid Excel auto-format oddities
+            as_int = total_seconds % 1 == 0
+            sanitized[col_name] = np.where(
+                as_int,
+                total_seconds.astype("Int64").astype(object),
+                total_seconds.astype(float),
+            ).astype(str)
+
+    # Booleans -> '0' / '1'
+    for col_name in sanitized.columns:
+        col = sanitized[col_name]
+        if pd.api.types.is_bool_dtype(col):
+            sanitized[col_name] = col.astype(int).astype(str)
+
+    # Object columns: coerce element-wise
+    def _coerce_object_value(value: Any) -> Any:
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            return None
+        # Keep primitives that are already CSV/Excel-safe
+        if isinstance(value, (str, int, float)):
+            return value
+        if isinstance(value, (np.integer, np.floating)):
+            return value.item()
+        if isinstance(value, (bool, np.bool_)):
+            return "1" if bool(value) else "0"
+        if isinstance(value, (bytes, bytearray)):
+            try:
+                return bytes(value).decode("utf-8", errors="replace")
+            except Exception:
+                return str(value)
+        # Lists/dicts/numpy arrays -> repr()
+        if isinstance(value, (list, dict, tuple, set, np.ndarray)):
+            return repr(value)
+        # Fallback to str()
+        return str(value)
+
+    for col_name in sanitized.columns:
+        col = sanitized[col_name]
+        if pd.api.types.is_object_dtype(col):
+            sanitized[col_name] = col.map(_coerce_object_value)
+
+    return sanitized
 
 
 def read_data(
@@ -146,7 +223,11 @@ def write_data(
 
     # Map extension to pandas write function
     if ext == "csv":
-        out_df.to_csv(file_path, **kwargs)
+        # Excel-first friendly CSV
+        sanitized_df = _sanitize_for_tabular(out_df)
+        write_kwargs = {"index": False, "encoding": "utf-8-sig", "na_rep": ""}
+        write_kwargs.update(kwargs)
+        sanitized_df.to_csv(file_path, **write_kwargs)
     elif ext == "dta":
         # Stata doesn't support index writing, so we don't pass it
         # Remove index parameter if it was passed
@@ -172,7 +253,11 @@ def write_data(
     elif ext == "feather":
         out_df.to_feather(file_path, **kwargs)
     elif ext in ("xlsx", "xls"):
-        out_df.to_excel(file_path, **kwargs)
+        # Apply the same sanitation for Excel to ensure consistent, readable values
+        sanitized_df = _sanitize_for_tabular(out_df)
+        write_kwargs = {"index": False}
+        write_kwargs.update(kwargs)
+        sanitized_df.to_excel(file_path, **write_kwargs)
     else:
         raise ValueError(
             f"Unsupported file format: '.{ext}'. "
