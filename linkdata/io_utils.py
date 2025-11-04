@@ -16,8 +16,41 @@ Supported formats:
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+import inspect
 import pandas as pd
 import numpy as np
+
+
+def _filter_kwargs(func: callable, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Filter kwargs to only include parameters that are valid for the given function.
+
+    Parameters
+    ----------
+    func : callable
+        The function to filter kwargs for.
+    kwargs : Dict[str, Any]
+        The keyword arguments to filter.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Filtered kwargs containing only valid parameters for the function.
+    """
+    try:
+        sig = inspect.signature(func)
+        valid_params = set(sig.parameters.keys())
+
+        # If function has **kwargs parameter, accept all kwargs
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                return kwargs
+
+        # Otherwise, filter to only valid parameters
+        return {k: v for k, v in kwargs.items() if k in valid_params}
+    except Exception:
+        # If we can't inspect the function, pass all kwargs
+        return kwargs
 
 
 # Helper: sanitize DataFrame for CSV/Excel/Stata exports
@@ -144,10 +177,13 @@ def read_data(
     **kwargs : Any
         Additional keyword arguments to pass to the underlying pandas read function.
         Common examples:
-        - usecols: List of columns to read
+        - usecols: List of columns to read (automatically mapped to 'columns' for
+          Stata, Parquet, and Feather formats)
         - dtype: Dictionary of column dtypes
         - parse_dates: List of columns to parse as dates
         - chunksize: For CSV, return an iterator (not supported for other formats)
+
+        Note: Unsupported kwargs for each format are automatically filtered out.
 
     Returns
     -------
@@ -169,8 +205,8 @@ def read_data(
     >>> # Read a CSV with specific columns
     >>> df = read_data("data/measures.csv", usecols=["Date", "GEOID10", "Tmax"])
 
-    >>> # Read a Parquet file
-    >>> df = read_data("data/results.parquet")
+    >>> # Read a Parquet file with specific columns (usecols works here too!)
+    >>> df = read_data("data/results.parquet", usecols=["id", "value"])
     """
     file_path = Path(file_path)
 
@@ -182,15 +218,32 @@ def read_data(
 
     # Map extension to pandas read function
     if ext == "csv":
-        return pd.read_csv(file_path, **kwargs)
+        filtered_kwargs = _filter_kwargs(pd.read_csv, kwargs)
+        return pd.read_csv(file_path, **filtered_kwargs)
     elif ext == "dta":
-        return pd.read_stata(file_path, **kwargs)
+        # Stata uses 'columns' instead of 'usecols'
+        mapped_kwargs = kwargs.copy()
+        if "usecols" in mapped_kwargs and "columns" not in mapped_kwargs:
+            mapped_kwargs["columns"] = mapped_kwargs.pop("usecols")
+        filtered_kwargs = _filter_kwargs(pd.read_stata, mapped_kwargs)
+        return pd.read_stata(file_path, **filtered_kwargs)
     elif ext in ("parquet", "pq"):
-        return pd.read_parquet(file_path, **kwargs)
+        # Parquet uses 'columns' instead of 'usecols'
+        mapped_kwargs = kwargs.copy()
+        if "usecols" in mapped_kwargs and "columns" not in mapped_kwargs:
+            mapped_kwargs["columns"] = mapped_kwargs.pop("usecols")
+        filtered_kwargs = _filter_kwargs(pd.read_parquet, mapped_kwargs)
+        return pd.read_parquet(file_path, **filtered_kwargs)
     elif ext == "feather":
-        return pd.read_feather(file_path, **kwargs)
+        # Feather uses 'columns' instead of 'usecols'
+        mapped_kwargs = kwargs.copy()
+        if "usecols" in mapped_kwargs and "columns" not in mapped_kwargs:
+            mapped_kwargs["columns"] = mapped_kwargs.pop("usecols")
+        filtered_kwargs = _filter_kwargs(pd.read_feather, mapped_kwargs)
+        return pd.read_feather(file_path, **filtered_kwargs)
     elif ext in ("xlsx", "xls"):
-        return pd.read_excel(file_path, **kwargs)
+        filtered_kwargs = _filter_kwargs(pd.read_excel, kwargs)
+        return pd.read_excel(file_path, **filtered_kwargs)
     else:
         raise ValueError(
             f"Unsupported file format: '.{ext}'. "
