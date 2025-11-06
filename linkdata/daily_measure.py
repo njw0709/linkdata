@@ -122,7 +122,7 @@ class DailyMeasureData:
         self.date_col = date_col
         self.geoid_col = geoid_col
         self.read_dtype = read_dtype
-        self.format
+        self.format = current_format
         self.expected_format = expected_format
         self.rename_col = rename_col
         self.geoid_filter = geoid_filter
@@ -144,9 +144,6 @@ class DailyMeasureData:
                 f"Column `{self.data_col}` not found in file: {self.filepath.name}\n"
                 f"Available columns: {self.columns}"
             )
-
-        # Detect format
-        self.format = current_format
 
         # --- 2. Load data ---
         # Detect file format
