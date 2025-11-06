@@ -103,7 +103,9 @@ class ContextualDataPage(QWizardPage):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setTitle("Contextual Data Directory")
-        self.setSubTitle("Select the directory containing daily contextual data files.")
+        self.setSubTitle(
+            "Select the directory containing daily contextual data files. (Must be long format)"
+        )
 
         self.preview_df = None
         self.validation_thread = None

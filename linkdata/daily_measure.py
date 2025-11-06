@@ -31,6 +31,7 @@ class DailyMeasureData:
         measure_type: Optional[str] = None,
         read_dtype: str = "float32",
         expected_format: str = "long",
+        current_format: str = "long",
         geoid_col: str = "GEOID10",
         date_col: str = "Date",
         rename_col: Optional[dict] = None,
@@ -121,6 +122,7 @@ class DailyMeasureData:
         self.date_col = date_col
         self.geoid_col = geoid_col
         self.read_dtype = read_dtype
+        self.format
         self.expected_format = expected_format
         self.rename_col = rename_col
         self.geoid_filter = geoid_filter
@@ -144,7 +146,7 @@ class DailyMeasureData:
             )
 
         # Detect format
-        self.format = "wide" if len(self.columns) > 4 else "long"
+        self.format = current_format
 
         # --- 2. Load data ---
         # Detect file format

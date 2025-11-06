@@ -1,10 +1,11 @@
 ---
-title: 'HRS Contextual Data Linkage Tool'
+title: 'STITCH: A Spatio-Temporal Integration Tool for Contextual enricHment of survey and observational data.'
 tags:
   - Python
-  - HRS
-  - Contextual Data
-  - Linkage
+  - Spatio-Temporal Integration
+  - Social Science
+  - Automated Data Pipeline
+
 authors:
   - name: Jong Woo Nam
     orcid: 0009-0004-1421-1463
@@ -31,12 +32,13 @@ bibliography: paper/paper.bib
 
 # Summary
 
-The HRS Contextual Data Linkage Tool is a Python-based desktop application that simplifies the process of linking HRS respondent data with contextual information from various geographic levels (e.g., census tract, county, state). The tool provides an intuitive graphical user interface that allows researchers to select their HRS dataset, choose contextual data sources, specify geographic identifiers, and perform the linkage with a few clicks. The application handles the complexities of data merging, geographic identifier matching, and data validation, producing a linked dataset ready for analysis. By automating these technical steps, the tool enables researchers to focus on their substantive research questions rather than data management challenges.
+STITCH is a Python-based framework for linking diverse data sources across geospatial and temporal dimensions to enable contextual enrichment of individual-level observational data. Its primary goal is to facilitate the augmentation of datasets, such as survey, clinical, or cohort data, with spatio-temporal contextual information (e.g., air quality, weather, or neighborhood characteristics), which often are high-dimensional and large. STITCH supports flexible geospatial (e.g., by census tract, ZIP code, or geographic coordinates) and precise time-lagged linkage, allowing researchers to create and align longitudinal contextual data based on the date of the observation (e.g. when the interview was conducted). It also supports the integration of participants’ residential histories, enabling accurate linkage of contextual data to periods of residence and relocation. Designed for local deployment, STITCH provides a scalable, reproducible, and user-friendly solution for high-resolution spatio-temporal data integration, offering both command-line (CLI) and graphical (GUI) interfaces for flexible use across research workflows. 
 
 # Statement of need
 
 
-# Processing Pipeline
+
+
 
 
 # Citations
