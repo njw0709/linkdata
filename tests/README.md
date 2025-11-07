@@ -17,6 +17,9 @@ The test fixtures generate fake data that mimics the structure and patterns of r
 - `test_hrs_data.py` - Fixtures and tests for `ResidentialHistoryHRS` class
 - `test_hrs_interview_data.py` - Fixtures and tests for `HRSInterviewData` class  
 - `test_integration.py` - Integration tests combining both classes
+- `test_end_to_end_linkage.py` - End-to-end workflow tests with batch and parallel processing
+- `test_performance_no_residential_history.py` - Performance tests for static GEOID linkage
+- `test_multicolumn_linkage.py` - Tests for linking multiple data columns simultaneously
 - `conftest.py` - Shared fixtures for session-scoped testing
 
 ### Test Data
@@ -115,6 +118,45 @@ The generated data includes realistic patterns:
 - **Interview dates** between 2015-2020
 - **Realistic GEOIDs** with proper 11-digit formatting
 - **Consistent person IDs** between residential and survey data
+
+## Multi-Column Linkage Tests
+
+The `test_multicolumn_linkage.py` module provides comprehensive tests for linking multiple data columns from contextual data sources simultaneously.
+
+### What is Multi-Column Linkage?
+
+Instead of running separate linkages for each data column (e.g., `tmax`, `tmin`, `humidity`), multi-column linkage allows you to link all columns at once:
+
+```python
+# Multi-column approach (efficient!)
+weather_data = DailyMeasureDataDir(
+    data_dir,
+    data_col=["tmax", "tmin", "humidity"],  # All three at once
+    measure_type=None,
+)
+```
+
+### Test Coverage
+
+- **Batch Processing**: Tests multi-column linkage with sequential processing
+- **Parallel Processing**: Tests multi-column linkage with parallel workers
+- **Consistency**: Verifies batch and parallel produce identical results
+- **Correctness**: Compares multi-column vs separate single-column approaches
+- **Residential History**: Tests multi-column linkage with participant moves
+
+### Running Multi-Column Tests
+
+```bash
+# Run all multi-column tests
+pytest tests/test_multicolumn_linkage.py -v -s
+
+# Run specific categories
+pytest tests/test_multicolumn_linkage.py -k "batch" -v -s
+pytest tests/test_multicolumn_linkage.py -k "parallel" -v -s
+pytest tests/test_multicolumn_linkage.py -k "consistency" -v -s
+```
+
+See [MULTICOLUMN_LINKAGE_TESTS.md](MULTICOLUMN_LINKAGE_TESTS.md) for detailed documentation.
 
 ## Dependencies
 
