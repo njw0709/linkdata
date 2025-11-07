@@ -129,6 +129,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='icons/icon.ico',
 )
 
 coll = COLLECT(
@@ -147,7 +148,7 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         coll,
         name='STITCH.app',
-        icon=None,  # Add .icns file path here if you have an icon
+        icon="icons/Icon.icns",
         bundle_identifier='org.stitch.tool',
         info_plist={
             'CFBundleName': 'STITCH',

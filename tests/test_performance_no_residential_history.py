@@ -53,9 +53,8 @@ def survey_data_static_geoids(tmp_path, real_geoid_pool):
             "gender": np.random.choice(["Male", "Female"]),
         }
 
-        # Add GEOID columns for each year 2016-2020
-        for year in range(2016, 2021):
-            row[f"LINKCEN2010_{year}"] = generate_fake_geoid(real_geoid_pool)
+        # Add GEOID columns
+        row[f"LINKCEN2010"] = generate_fake_geoid(real_geoid_pool)
 
         rows.append(row)
 

@@ -6,7 +6,7 @@ A PyQt6-based graphical user interface for STITCH - A Spatio-Temporal Integratio
 
 This GUI provides a wizard-style interface for configuring and running the lagged contextual data linkage pipeline. It guides users through:
 
-1. **HRS Survey Data Selection** - Load HRS survey/interview data and select the date column
+1. **Base (survey/interview) Dataset Selection** - Load HRS survey/interview data and select the date column
 2. **Residential History (Optional)** - Configure residential move history if participants moved
 3. **Contextual Data Directory** - Select daily contextual data (heat, PM2.5, etc.) with automatic validation
 4. **Pipeline Configuration** - Set processing parameters (lags, parallel execution, output)
@@ -47,8 +47,8 @@ python gui_app.py
 
 ### Workflow
 
-1. **Select HRS Data**
-   - Browse and select your HRS survey data file (.dta format)
+1. **Select Base (survey/interview) Dataset**
+   - Browse and select your survey/interview data (e.g., HRS) file (.dta format)
    - Preview the first 5 rows
    - Choose which column contains the date information
 
