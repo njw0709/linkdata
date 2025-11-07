@@ -39,8 +39,6 @@ STITCH is a Python-based framework for linking diverse data sources across geosp
 
 
 
-
-
 # Citations
 
 <!-- Citations to entries in paper.bib should be in

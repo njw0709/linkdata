@@ -17,7 +17,7 @@ from PyQt6.QtCore import Qt
 
 from ..widgets.file_picker import FilePicker
 from ..widgets.data_preview_table import DataPreviewTable
-from ..validators import validate_stata_file, validate_date_column, load_preview_data
+from ..validators import validate_data_file, validate_date_column, load_preview_data
 
 
 class HRSDataPage(QWizardPage):
@@ -39,7 +39,15 @@ class HRSDataPage(QWizardPage):
         file_group = QGroupBox("Survey Data File")
         file_layout = QFormLayout()
 
-        self.file_picker = FilePicker(file_filter="Stata Files (*.dta);;All Files (*)")
+        self.file_picker = FilePicker(
+            file_filter="All Supported Files (*.dta *.csv *.parquet *.pq *.feather *.xlsx *.xls);;"
+            "Stata Files (*.dta);;"
+            "CSV Files (*.csv);;"
+            "Parquet Files (*.parquet *.pq);;"
+            "Feather Files (*.feather);;"
+            "Excel Files (*.xlsx *.xls);;"
+            "All Files (*)"
+        )
         self.file_picker.fileSelected.connect(self._on_file_selected)
         file_layout.addRow("Survey Data File:", self.file_picker)
 
@@ -105,7 +113,7 @@ class HRSDataPage(QWizardPage):
     def _on_file_selected(self, file_path: str):
         """Handle file selection."""
         # Validate file
-        is_valid, error_msg = validate_stata_file(file_path)
+        is_valid, error_msg = validate_data_file(file_path)
 
         if not is_valid:
             QMessageBox.warning(self, "Invalid File", error_msg)

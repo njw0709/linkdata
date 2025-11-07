@@ -46,6 +46,39 @@ def validate_stata_file(path: str) -> Tuple[bool, str]:
         return False, f"Error reading Stata file: {str(e)}"
 
 
+def validate_data_file(path: str) -> Tuple[bool, str]:
+    """
+    Validate that a file is a readable data file in any supported format.
+
+    Supported formats: CSV, Stata (.dta), Parquet, Feather, Excel
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if not validate_file_exists(path):
+        return False, f"File not found: {path}"
+
+    try:
+        # Try to determine file format
+        file_format = get_file_format(Path(path))
+
+        # Try to read a preview of the file
+        df, error_msg = load_preview_data(path, n_rows=1)
+
+        if df is None:
+            return False, error_msg
+
+        if df.empty:
+            return False, "File is empty"
+
+        return True, ""
+    except ValueError as e:
+        # get_file_format raises ValueError for unsupported formats
+        return False, f"Unsupported file format: {str(e)}"
+    except Exception as e:
+        return False, f"Error reading file: {str(e)}"
+
+
 def validate_date_column(df: pd.DataFrame, col: str) -> Tuple[bool, str]:
     """
     Validate that a column exists and can be interpreted as dates.
