@@ -1,7 +1,7 @@
 [project]
-name = "linkage"
+name = "stitch"
 version = "0.1.0"
-description = "HRS Linkage Tool - Link lagged contextual data to HRS survey data"
+description = "STITCH - A Spatio-Temporal Integration Tool for Contextual enricHment of survey and observational data"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-linkage-cli = "link_lags:main"
-linkage-gui = "gui_app:main"
+stitch-cli = "link_lags:main"
+stitch-gui = "gui_app:main"
 
 [tool.pytest.ini_options]
 markers = [

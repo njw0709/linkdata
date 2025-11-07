@@ -12,9 +12,9 @@ This module tests the full workflow from step1 script including:
 import pytest
 import pandas as pd
 
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData
-from linkdata.daily_measure import DailyMeasureDataDir
-from linkdata.process import (
+from stitch.hrs import ResidentialHistoryHRS, HRSInterviewData
+from stitch.daily_measure import DailyMeasureDataDir
+from stitch.process import (
     process_multiple_lags_batch,
     process_multiple_lags_parallel,
 )

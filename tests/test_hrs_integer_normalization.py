@@ -10,7 +10,7 @@ import pytest
 from pathlib import Path
 import tempfile
 
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData
+from stitch.hrs import ResidentialHistoryHRS, HRSInterviewData
 
 
 @pytest.fixture

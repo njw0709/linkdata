@@ -18,7 +18,7 @@ For example, processing 10 lags with 5 years of data means 50 file reads instead
 
 ### 1. Preload Function in `DailyMeasureDataDir`
 
-**File**: `linkdata/daily_measure.py`
+**File**: `stitch/daily_measure.py`
 
 ```python
 def preload_years(self, years: Optional[List[str]] = None) -> None:
@@ -45,7 +45,7 @@ heat_data.preload_years(['2016', '2017', '2018', '2019', '2020'])
 
 ### 2. Compute Required Years
 
-**File**: `linkdata/process.py`
+**File**: `stitch/process.py`
 
 ```python
 def compute_required_years(
@@ -275,9 +275,9 @@ for batch in lag_batches:
 Here's a complete example showing the optimized workflow:
 
 ```python
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData
-from linkdata.daily_measure import DailyMeasureDataDir
-from linkdata.process import process_single_lag, compute_required_years
+from stitch.hrs import ResidentialHistoryHRS, HRSInterviewData
+from stitch.daily_measure import DailyMeasureDataDir
+from stitch.process import process_single_lag, compute_required_years
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 

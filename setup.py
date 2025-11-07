@@ -21,7 +21,7 @@ CLASSIFIERS = [
 # calling the setup function
 # TODO: separate dev / test / deploy setup with options
 setuptools.setup(
-    name="linkdata",
+    name="stitch",
     version="0.0.1",
     description="linking environment data with hrs",
     long_description=long_description,
@@ -31,5 +31,5 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     classifiers=CLASSIFIERS,
     install_requires=REQUIREMENTS,
-    keywords="CDR, weather, raster, geopandas, HRS",
+    keywords="CDR, weather, raster, geopandas, Data linkage",
 )

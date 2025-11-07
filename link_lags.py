@@ -50,7 +50,7 @@ python link_lags.py \
 
 import argparse
 
-from linkdata.process import run_pipeline
+from stitch.process import run_pipeline
 
 
 def _create_parser() -> argparse.ArgumentParser:

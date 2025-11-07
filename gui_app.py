@@ -18,7 +18,7 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import QApplication
 
-from linkdata.gui.main_window import LinkageWizard
+from stitch.gui.main_window import LinkageWizard
 
 
 def get_log_file():

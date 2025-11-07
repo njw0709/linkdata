@@ -1,5 +1,5 @@
 """
-Tests for the flexible I/O utilities in linkdata.io_utils module.
+Tests for the flexible I/O utilities in stitch.io_utils module.
 
 Tests cover:
 - Reading various file formats (CSV, Stata, Parquet, Feather, Excel)
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import pandas as pd
 import numpy as np
-from linkdata.io_utils import read_data, write_data, get_file_format
+from stitch.io_utils import read_data, write_data, get_file_format
 
 
 @pytest.fixture

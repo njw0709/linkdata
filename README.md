@@ -1,6 +1,6 @@
 # STITCH: A Spatio-Temporal Integration Tool for Contextual enricHment of survey and observational data.
 
-STITCH is a Python-based interface for linking diverse data sources across geospatial and temporal dimensions to enable contextual enrichment of individual-level observational data. Its primary goal is to facilitate the augmentation of datasets, such as survey, clinical, or cohort data, with spatio-temporal contextual information (e.g., air quality, weather, or neighborhood characteristics), which often are high-dimensional and large. STITCH supports flexible geospatial (e.g., by census tract, ZIP code, or geographic coordinates) and precise time-lagged linkage, allowing researchers to create and align longitudinal contextual data based on the date of the observation (e.g. when the interview was conducted). It also supports the integration of participants’ residential histories, enabling accurate linkage of contextual data to periods of residence and relocation. Designed for local deployment, STITCH provides a scalable, reproducible, and user-friendly solution for high-resolution spatio-temporal data integration, offering both command-line (CLI) and graphical (GUI) interfaces for flexible use across research workflows. 
+STITCH is a Python-based interactive interface for linking diverse data sources across geospatial and temporal dimensions to enable contextual enrichment of individual-level observational data. Its primary goal is to facilitate the augmentation of datasets, such as survey, clinical, or cohort data, with spatio-temporal contextual information (e.g., air quality, weather, or neighborhood characteristics), which often are high-dimensional and large. STITCH supports flexible geospatial (e.g., by census tract, ZIP code, or geographic coordinates) and precise time-lagged linkage, allowing researchers to create and align longitudinal contextual data based on the date of the observation (e.g. when the interview was conducted). It also supports the integration of participants’ residential histories, enabling accurate linkage of contextual data to periods of residence and relocation. Designed for local deployment, STITCH provides a scalable, reproducible, and user-friendly solution for high-resolution spatio-temporal data integration, offering both command-line (CLI) and graphical (GUI) interfaces for flexible use across research workflows.
 
 ## Features
 
@@ -16,12 +16,12 @@ STITCH is a Python-based interface for linking diverse data sources across geosp
 
 Download the pre-built standalone application for your platform:
 
-- **macOS (Apple Silicon/M1/M2/M3)**: [Download STITCH-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/STITCH-macOS-ARM.zip)
+- **macOS (Apple Silicon/M1/M2/M3)**: [Download STITCH-macOS-ARM.zip](https://github.com/njw0709/stitch/releases/latest/download/STITCH-macOS-ARM.zip)
   - Extract the ZIP file and run `STITCH.app`
   - **First-time users**: Right-click the app and select "Open" to bypass macOS Gatekeeper (app is unsigned)
   - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/STITCH.app`
 
-- **Windows**: [Download STITCH-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/STITCH-Windows.zip)
+- **Windows**: [Download STITCH-Windows.zip](https://github.com/njw0709/stitch/releases/latest/download/STITCH-Windows.zip)
   - Extract the ZIP file and run `STITCH.exe`
   - If Windows Defender SmartScreen warns about the app, click "More info" → "Run anyway"
   - Note: Unsigned apps may trigger antivirus warnings (false positive)
@@ -37,7 +37,7 @@ If you prefer to run from source or need the CLI:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd linkage
+cd stitch
 
 # Install dependencies using uv (recommended)
 uv sync
@@ -63,7 +63,7 @@ The GUI provides a step-by-step wizard for:
 4. Setting pipeline parameters (number of lags, parallel processing)
 5. Running the pipeline with real-time progress monitoring
 
-See [linkdata/gui/README.md](linkdata/gui/README.md) for detailed GUI documentation.
+See [stitch/gui/README.md](stitch/gui/README.md) for detailed GUI documentation.
 
 ### Option 2: Command-Line Interface (CLI)
 
@@ -149,8 +149,8 @@ python link_lags.py \
 ## Package Structure
 
 ```
-linkage/
-├── linkdata/
+stitch/
+├── stitch/
 │   ├── hrs.py                 # HRS data handling classes
 │   ├── daily_measure.py       # Contextual data loading
 │   ├── process.py             # Parallel/batch processing

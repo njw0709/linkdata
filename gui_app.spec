@@ -15,7 +15,7 @@ from PyQt6 import QtCore
 block_cipher = None
 
 # Collect all submodules from critical packages
-linkdata_submodules = collect_submodules('linkdata')
+stitch_submodules = collect_submodules('stitch')
 
 # Additional hidden imports - let PyInstaller's hooks handle pandas/numpy automatically
 hidden_imports = [
@@ -31,7 +31,7 @@ hidden_imports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
-] + linkdata_submodules
+] + stitch_submodules
 
 # Collect Qt plugins - required for all platforms
 # These plugins are essential for Qt to function properly
@@ -119,7 +119,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='HRSLinkageTool',
+    name='STITCH',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -139,19 +139,19 @@ coll = COLLECT(
     strip=False,
     upx=False,  # Disabled: UPX can corrupt Qt DLLs and trigger antivirus false positives
     upx_exclude=[],
-    name='HRSLinkageTool',
+    name='STITCH',
 )
 
 # macOS app bundle
 if sys.platform == 'darwin':
     app = BUNDLE(
         coll,
-        name='HRSLinkageTool.app',
+        name='STITCH.app',
         icon=None,  # Add .icns file path here if you have an icon
-        bundle_identifier='org.hrsresearch.linkagetool',
+        bundle_identifier='org.stitch.tool',
         info_plist={
-            'CFBundleName': 'HRS Linkage Tool',
-            'CFBundleDisplayName': 'HRS Linkage Tool',
+            'CFBundleName': 'STITCH',
+            'CFBundleDisplayName': 'STITCH',
             'CFBundleVersion': '0.1.0',
             'CFBundleShortVersionString': '0.1.0',
             'NSHighResolutionCapable': 'True',

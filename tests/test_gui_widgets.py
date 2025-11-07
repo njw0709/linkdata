@@ -15,8 +15,8 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtCore import Qt
 import pandas as pd
 
-from linkdata.gui.widgets.file_picker import FilePicker, DirectoryPicker
-from linkdata.gui.widgets.data_preview_table import DataPreviewTable
+from stitch.gui.widgets.file_picker import FilePicker, DirectoryPicker
+from stitch.gui.widgets.data_preview_table import DataPreviewTable
 
 
 class TestFilePicker:

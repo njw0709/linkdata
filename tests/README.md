@@ -1,6 +1,6 @@
-# HRS Test Fixtures
+# STITCH Test Fixtures
 
-This directory contains pytest fixtures for testing the `ResidentialHistoryHRS` and `HRSInterviewData` classes from the `linkdata.hrs` module.
+This directory contains pytest fixtures for testing the `ResidentialHistoryHRS` and `HRSInterviewData` classes from the `stitch.hrs` module.
 
 ## Overview
 

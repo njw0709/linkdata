@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from linkdata.gui.validators import (
+from stitch.gui.validators import (
     validate_file_exists,
     validate_directory_exists,
     validate_stata_file,

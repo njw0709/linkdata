@@ -14,7 +14,7 @@ if sys.platform == "linux" and "DISPLAY" not in os.environ:
 
 import pytest
 from pathlib import Path
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData
+from stitch.hrs import ResidentialHistoryHRS, HRSInterviewData
 from .data_generators import (
     create_residential_history_data,
     create_survey_data,

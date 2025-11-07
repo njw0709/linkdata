@@ -1,6 +1,6 @@
-# HRS Linkage Tool GUI
+# STITCH GUI
 
-A PyQt6-based graphical user interface for the HRS (Health and Retirement Study) lagged contextual data linkage tool.
+A PyQt6-based graphical user interface for STITCH - A Spatio-Temporal Integration Tool for Contextual enricHment of survey and observational data.
 
 ## Overview
 
@@ -17,7 +17,7 @@ This GUI provides a wizard-style interface for configuring and running the lagge
 - Python 3.8+
 - PyQt6
 - pandas
-- All dependencies from the main linkage package
+- All dependencies from the main stitch package
 
 ## Installation
 
@@ -94,7 +94,7 @@ python gui_app.py
 ## Architecture
 
 ```
-linkdata/gui/
+stitch/gui/
 ├── __init__.py
 ├── main_window.py          # Main wizard window
 ├── validators.py           # Data validation functions
@@ -153,5 +153,5 @@ def validate_custom_check(data) -> Tuple[bool, str]:
 
 ## License
 
-Same as the main HRS Linkage Tool package.
+Same as the main STITCH package.
 

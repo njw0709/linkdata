@@ -1,6 +1,6 @@
 # Build and Release Guide
 
-This document explains how to create releases of the HRS Linkage Tool GUI application.
+This document explains how to create releases of the STITCH GUI application.
 
 ## Overview
 
@@ -43,13 +43,13 @@ git push origin v0.2.0
 ### 4. Wait for Build
 
 The GitHub Actions workflow will automatically:
-1. Build macOS ARM application (HRSLinkageTool.app) using `ditto` for proper ZIP packaging
-2. Build Windows application (HRSLinkageTool.exe)
+1. Build macOS ARM application (STITCH.app) using `ditto` for proper ZIP packaging
+2. Build Windows application (STITCH.exe)
 3. Create a GitHub Release with both builds attached
 4. Generate release notes from your tag message
 
 You can monitor the build progress at:
-`https://github.com/njw0709/linkdata/actions`
+`https://github.com/njw0709/stitch/actions`
 
 **Note:** Download links in the README use `/latest/` which automatically points to the newest published release.
 
@@ -67,13 +67,13 @@ uv pip install pyinstaller==6.3.0
 # Build the app
 uv run pyinstaller gui_app.spec
 
-# The built app will be in dist/HRSLinkageTool.app
+# The built app will be in dist/STITCH.app
 # Test it by running:
-open dist/HRSLinkageTool.app
+open dist/STITCH.app
 
 # Create ZIP archive using ditto (preserves macOS attributes properly)
 cd dist
-ditto -c -k --sequesterRsrc --keepParent HRSLinkageTool.app HRSLinkageTool-macOS-ARM.zip
+ditto -c -k --sequesterRsrc --keepParent STITCH.app STITCH-macOS-ARM.zip
 cd ..
 ```
 
@@ -86,9 +86,9 @@ uv pip install pyinstaller
 # Build the app
 uv run pyinstaller gui_app.spec
 
-# The built app will be in dist\HRSLinkageTool\HRSLinkageTool.exe
+# The built app will be in dist\STITCH\STITCH.exe
 # Test it by running:
-.\dist\HRSLinkageTool\HRSLinkageTool.exe
+.\dist\STITCH\STITCH.exe
 ```
 
 ## Troubleshooting

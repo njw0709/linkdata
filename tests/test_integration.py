@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 from pathlib import Path
 
-from linkdata.hrs import ResidentialHistoryHRS, HRSInterviewData, HRSContextLinker
-from linkdata.daily_measure import DailyMeasureDataDir
+from stitch.hrs import ResidentialHistoryHRS, HRSInterviewData, HRSContextLinker
+from stitch.daily_measure import DailyMeasureDataDir
 
 
 def test_residential_history_integration(residential_history_hrs):

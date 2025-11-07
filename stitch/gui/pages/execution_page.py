@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import QThread, pyqtSignal, QUrl
 from PyQt6.QtGui import QDesktopServices
 
-from linkdata.process import run_pipeline
+from stitch.process import run_pipeline
 
 
 # Regex to remove most emoji code points while preserving non-emoji Unicode
