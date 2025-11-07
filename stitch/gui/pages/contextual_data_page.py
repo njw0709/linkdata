@@ -177,6 +177,24 @@ class ContextualDataPage(QWizardPage):
         data_col_select_layout = QHBoxLayout()
         self.data_col_source_combo = QComboBox()
         self.data_col_add_btn = QPushButton("Add")
+        self.data_col_add_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 5px 15px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """
+        )
         self.data_col_add_btn.clicked.connect(self._on_add_data_column)
         data_col_select_layout.addWidget(self.data_col_source_combo, 1)
         data_col_select_layout.addWidget(self.data_col_add_btn, 0)
@@ -187,6 +205,24 @@ class ContextualDataPage(QWizardPage):
         self.data_col_list = QListWidget()
         self.data_col_list.setMaximumHeight(100)
         self.data_col_remove_btn = QPushButton("Remove")
+        self.data_col_remove_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 5px 15px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+        """
+        )
         self.data_col_remove_btn.clicked.connect(self._on_remove_data_column)
         data_col_list_layout.addWidget(self.data_col_list, 1)
         data_col_list_layout.addWidget(self.data_col_remove_btn, 0)
