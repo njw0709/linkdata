@@ -30,7 +30,9 @@ class LinkageWizard(QWizard):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.setWindowTitle("HRS Linkage Tool")
+        self.setWindowTitle(
+            "STITCH: Spatio-Temporal Integration Tool for Contextual and Historical data"
+        )
         self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setOption(QWizard.WizardOption.HaveHelpButton, False)
 
