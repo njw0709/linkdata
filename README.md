@@ -1,13 +1,13 @@
-# HRS Linkage Tool
+# STITCH: A Spatio-Temporal Integration Tool for Contextual enricHment of survey and observational data.
 
-A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5, ozone) to Health and Retirement Study (HRS) survey and epigenetic data. Supports both command-line and graphical user interfaces.
+STITCH is a Python-based interface for linking diverse data sources across geospatial and temporal dimensions to enable contextual enrichment of individual-level observational data. Its primary goal is to facilitate the augmentation of datasets, such as survey, clinical, or cohort data, with spatio-temporal contextual information (e.g., air quality, weather, or neighborhood characteristics), which often are high-dimensional and large. STITCH supports flexible geospatial (e.g., by census tract, ZIP code, or geographic coordinates) and precise time-lagged linkage, allowing researchers to create and align longitudinal contextual data based on the date of the observation (e.g. when the interview was conducted). It also supports the integration of participants’ residential histories, enabling accurate linkage of contextual data to periods of residence and relocation. Designed for local deployment, STITCH provides a scalable, reproducible, and user-friendly solution for high-resolution spatio-temporal data integration, offering both command-line (CLI) and graphical (GUI) interfaces for flexible use across research workflows. 
 
 ## Features
 
 - **Lagged Data Linkage** - Compute n-day prior exposure for any number of lag periods
 - **Residential History Support** - Account for participant moves during study period
 - **Flexible Data Formats** - Supports CSV, Stata, Parquet, Feather, and Excel files
-- **Parallel Processing** - Optimized for large-scale datasets with multiprocessing
+- **Parallel Processing** - Optimized for large-scale datasets with multiprocessing in local environment
 - **Two Interfaces** - Choose between CLI for automation or GUI for interactive use
 
 ## Installation
@@ -16,19 +16,19 @@ A comprehensive tool for linking lagged contextual data (e.g., heat index, PM2.5
 
 Download the pre-built standalone application for your platform:
 
-- **macOS (Apple Silicon/M1/M2/M3)**: [Download HRSLinkageTool-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-macOS-ARM.zip)
-  - Extract the ZIP file and run `HRSLinkageTool.app`
+- **macOS (Apple Silicon/M1/M2/M3)**: [Download STITCH-macOS-ARM.zip](https://github.com/njw0709/linkdata/releases/latest/download/STITCH-macOS-ARM.zip)
+  - Extract the ZIP file and run `STITCH.app`
   - **First-time users**: Right-click the app and select "Open" to bypass macOS Gatekeeper (app is unsigned)
-  - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/HRSLinkageTool.app`
+  - If you see "damaged" error, run in Terminal: `xattr -cr /path/to/STITCH.app`
 
-- **Windows**: [Download HRSLinkageTool-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/HRSLinkageTool-Windows.zip)
-  - Extract the ZIP file and run `HRSLinkageTool.exe`
+- **Windows**: [Download STITCH-Windows.zip](https://github.com/njw0709/linkdata/releases/latest/download/STITCH-Windows.zip)
+  - Extract the ZIP file and run `STITCH.exe`
   - If Windows Defender SmartScreen warns about the app, click "More info" → "Run anyway"
   - Note: Unsigned apps may trigger antivirus warnings (false positive)
 
 **Troubleshooting**: If the app fails to start, check the error log file:
-- **macOS/Linux**: `~/.hrs-linkage-tool.log`
-- **Windows**: `C:\Users\YourUsername\.hrs-linkage-tool.log`
+- **macOS/Linux**: `~/.stitch.log`
+- **Windows**: `C:\Users\YourUsername\.stitch.log`
 
 ### Build from Source
 

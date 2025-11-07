@@ -144,7 +144,16 @@ class PipelineConfigPage(QWizardPage):
         file_ext = wizard.field("file_extension")
         summary_lines.append(f"Directory: {context_dir}")
         summary_lines.append(f"Measure Type: {measure_type}")
-        summary_lines.append(f"Data Column: {data_col}")
+
+        # Handle multiple data columns (comma-separated)
+        if data_col and "," in data_col:
+            data_cols = [col.strip() for col in data_col.split(",")]
+            summary_lines.append(f"Data Columns ({len(data_cols)}):")
+            for col in data_cols:
+                summary_lines.append(f"  - {col}")
+        else:
+            summary_lines.append(f"Data Column: {data_col}")
+
         summary_lines.append(f"GEOID Column: {contextual_geoid_col}")
         summary_lines.append(f"File Extension: {file_ext}")
         summary_lines.append("")

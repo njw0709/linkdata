@@ -478,7 +478,7 @@ class HRSContextLinker:
         preloaded_contextual_df: pd.DataFrame,
         contextual_date_col: str,
         contextual_geoid_col: str,
-        contextual_data_col: str,
+        contextual_data_col: Union[str, List[str]],
         include_lag_date: bool = False,
         geoid_col: Optional[str] = None,
     ) -> pd.DataFrame:
@@ -505,8 +505,8 @@ class HRSContextLinker:
             Name of date column in contextual data (e.g., 'date')
         contextual_geoid_col : str
             Name of GEOID column in contextual data (e.g., 'geoid')
-        contextual_data_col : str
-            Name of data/measure column in contextual data (e.g., 'tmax', 'pm25')
+        contextual_data_col : str or List[str]
+            Name(s) of data/measure column(s) in contextual data (e.g., 'tmax', 'pm25', or ['tmax', 'pm25'])
         include_lag_date : bool, default False
             Whether to include the lagged date column in the output
         geoid_col : str, optional
@@ -519,6 +519,10 @@ class HRSContextLinker:
         """
         if geoid_col is None:
             geoid_col = hrs_data.geoid_col
+
+        # Normalize contextual_data_col to list
+        if isinstance(contextual_data_col, str):
+            contextual_data_col = [contextual_data_col]
 
         # Extract pre-computed lag columns
         n_day_colname = f"{hrs_data.datecol}_{n}day_prior"
@@ -550,14 +554,20 @@ class HRSContextLinker:
             suffixes=(None, None),
         )
 
-        # Rename contextual column
-        new_col_name = f"{contextual_data_col}_{n_day_colname}"
-        merged.rename(columns={contextual_data_col: new_col_name}, inplace=True)
+        # Rename contextual columns and build output column list
+        rename_dict = {}
+        new_col_names = []
+        for col in contextual_data_col:
+            new_col_name = f"{col}_{n_day_colname}"
+            rename_dict[col] = new_col_name
+            new_col_names.append(new_col_name)
+
+        merged.rename(columns=rename_dict, inplace=True)
 
         out_cols = [id_col]
         if include_lag_date:
             out_cols.append(n_day_colname)
             out_cols.append(n_day_geoid_colname)
-        out_cols.append(new_col_name)
+        out_cols.extend(new_col_names)
 
         return merged[out_cols]

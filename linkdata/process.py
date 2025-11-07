@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 import argparse
 import pandas as pd
 from tqdm import tqdm
@@ -455,7 +455,7 @@ def _process_single_lag_internal(
     preloaded_contextual_df: Optional[pd.DataFrame] = None,
     contextual_date_col: Optional[str] = None,
     contextual_geoid_col: Optional[str] = None,
-    contextual_data_col: Optional[str] = None,
+    contextual_data_col: Union[str, List[str], None] = None,
     contextual_dir: Optional[DailyMeasureDataDir] = None,
 ) -> Optional[Path]:
     """
@@ -490,8 +490,8 @@ def _process_single_lag_internal(
         Name of date column in contextual data.
     contextual_geoid_col : str, optional
         Name of GEOID column in contextual data.
-    contextual_data_col : str, optional
-        Name of data column in contextual data.
+    contextual_data_col : str or List[str], optional
+        Name(s) of data column(s) in contextual data.
     contextual_dir : DailyMeasureDataDir, optional
         Contextual dataset directory. Only needed if metadata columns or preloaded data not provided.
 
@@ -677,10 +677,17 @@ def run_pipeline(args: argparse.Namespace):
     context_date_col = getattr(args, "context_date_col", None) or "Date"
     # Use contextual_geoid_col if provided, otherwise default to "GEOID10"
     contextual_geoid_col = getattr(args, "contextual_geoid_col", None) or "GEOID10"
+
+    # Parse data_col (may be comma-separated string or list)
+    if isinstance(args.data_col, str):
+        data_cols = [col.strip() for col in args.data_col.split(",")]
+    else:
+        data_cols = args.data_col
+
     contextual_data_all = DailyMeasureDataDir(
         context_dir,
         measure_type=args.measure_type,
-        data_col=args.data_col,
+        data_col=data_cols,
         geoid_col=contextual_geoid_col,
         date_col=context_date_col,
         file_extension=args.file_extension,

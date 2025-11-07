@@ -22,13 +22,13 @@ from ..validators import validate_stata_file, validate_date_column, load_preview
 
 class HRSDataPage(QWizardPage):
     """
-    Wizard page for selecting HRS survey data file and date column.
+    Wizard page for selecting survey data file and date column.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setTitle("HRS Survey Data")
-        self.setSubTitle("Select the HRS survey data file and specify the date column.")
+        self.setTitle("Base Dataset")
+        self.setSubTitle("Select the base dataset file and specify the date column.")
 
         self.preview_df = None
 
@@ -41,7 +41,7 @@ class HRSDataPage(QWizardPage):
 
         self.file_picker = FilePicker(file_filter="Stata Files (*.dta);;All Files (*)")
         self.file_picker.fileSelected.connect(self._on_file_selected)
-        file_layout.addRow("HRS Data File:", self.file_picker)
+        file_layout.addRow("Survey Data File:", self.file_picker)
 
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)

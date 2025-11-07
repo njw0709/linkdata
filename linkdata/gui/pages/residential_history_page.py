@@ -80,7 +80,10 @@ class ResidentialHistoryPage(QWizardPage):
         columns_layout.addRow("Move Month Column:", self.mvmonth_combo)
 
         self.survey_yr_combo = QComboBox()
-        columns_layout.addRow("Survey Year Column:", self.survey_yr_combo)
+        columns_layout.addRow(
+            "Survey Year Column (Will be used if Move Year is empty):",
+            self.survey_yr_combo,
+        )
 
         self.geoid_combo = QComboBox()
         columns_layout.addRow("GEOID Column:", self.geoid_combo)

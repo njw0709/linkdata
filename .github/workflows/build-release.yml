@@ -38,13 +38,13 @@ jobs:
       - name: Create ZIP archive with ditto
         run: |
           cd dist
-          ditto -c -k --sequesterRsrc --keepParent HRSLinkageTool.app HRSLinkageTool-macOS-ARM.zip
+          ditto -c -k --sequesterRsrc --keepParent STITCH.app STITCH-macOS-ARM.zip
       
       - name: Upload macOS ARM build artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-arm-build
-          path: dist/HRSLinkageTool-macOS-ARM.zip
+          path: dist/STITCH-macOS-ARM.zip
           retention-days: 5
 
   build-windows:
@@ -75,14 +75,14 @@ jobs:
       - name: Create ZIP archive
         run: |
           cd dist
-          Compress-Archive -Path HRSLinkageTool -DestinationPath HRSLinkageTool-Windows.zip
+          Compress-Archive -Path STITCH -DestinationPath STITCH-Windows.zip
         shell: pwsh
       
       - name: Upload Windows build artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/HRSLinkageTool-Windows.zip
+          path: dist/STITCH-Windows.zip
           retention-days: 5
 
   create-release:
@@ -119,8 +119,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            ./artifacts/HRSLinkageTool-macOS-ARM.zip
-            ./artifacts/HRSLinkageTool-Windows.zip
+            ./artifacts/STITCH-macOS-ARM.zip
+            ./artifacts/STITCH-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

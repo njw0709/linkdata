@@ -8,6 +8,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWizardPage,
     QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QComboBox,
     QGroupBox,
@@ -15,6 +16,8 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QProgressBar,
+    QPushButton,
+    QListWidget,
 )
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -166,8 +169,34 @@ class ContextualDataPage(QWizardPage):
         columns_group = QGroupBox("Column Selection")
         columns_layout = QFormLayout()
 
-        self.data_col_combo = QComboBox()
-        columns_layout.addRow("Contextual Data Column:", self.data_col_combo)
+        # Data columns: multi-select with Add/Remove buttons
+        data_col_label = QLabel("Contextual Data Columns:")
+        data_col_widget = QVBoxLayout()
+
+        # Source selector and Add button
+        data_col_select_layout = QHBoxLayout()
+        self.data_col_source_combo = QComboBox()
+        self.data_col_add_btn = QPushButton("Add")
+        self.data_col_add_btn.clicked.connect(self._on_add_data_column)
+        data_col_select_layout.addWidget(self.data_col_source_combo, 1)
+        data_col_select_layout.addWidget(self.data_col_add_btn, 0)
+        data_col_widget.addLayout(data_col_select_layout)
+
+        # Selected columns list and Remove button
+        data_col_list_layout = QHBoxLayout()
+        self.data_col_list = QListWidget()
+        self.data_col_list.setMaximumHeight(100)
+        self.data_col_remove_btn = QPushButton("Remove")
+        self.data_col_remove_btn.clicked.connect(self._on_remove_data_column)
+        data_col_list_layout.addWidget(self.data_col_list, 1)
+        data_col_list_layout.addWidget(self.data_col_remove_btn, 0)
+        data_col_widget.addLayout(data_col_list_layout)
+
+        columns_layout.addRow(data_col_label, data_col_widget)
+
+        # Hidden field for storing comma-separated list
+        self.data_col_hidden = QLineEdit()
+        self.data_col_hidden.setVisible(False)
 
         self.geoid_col_combo = QComboBox()
         columns_layout.addRow("GEOID Column:", self.geoid_col_combo)
@@ -184,7 +213,7 @@ class ContextualDataPage(QWizardPage):
         # Register fields
         self.registerField("context_dir*", self.dir_picker.path_edit)
         self.registerField("measure_type*", self.measure_type_edit)
-        self.registerField("data_col*", self.data_col_combo, "currentText")
+        self.registerField("data_col*", self.data_col_hidden)
         self.registerField("contextual_geoid_col", self.geoid_col_combo, "currentText")
         self.registerField("context_date_col", self.date_col_combo, "currentText")
         self.registerField("file_extension", self.file_ext_combo, "currentText")
@@ -197,6 +226,41 @@ class ContextualDataPage(QWizardPage):
         """Handle settings changes (file extension or measure type)."""
         if self.dir_picker.get_path():
             self._validate_directory()
+
+    def _on_add_data_column(self):
+        """Add selected column to the data columns list."""
+        selected_col = self.data_col_source_combo.currentText()
+        if not selected_col:
+            return
+
+        # Check if already in list
+        for i in range(self.data_col_list.count()):
+            if self.data_col_list.item(i).text() == selected_col:
+                return  # Already added
+
+        # Add to list
+        self.data_col_list.addItem(selected_col)
+        self._update_data_col_field()
+        self.completeChanged.emit()
+
+    def _on_remove_data_column(self):
+        """Remove selected column(s) from the data columns list."""
+        selected_items = self.data_col_list.selectedItems()
+        if not selected_items:
+            return
+
+        for item in selected_items:
+            self.data_col_list.takeItem(self.data_col_list.row(item))
+
+        self._update_data_col_field()
+        self.completeChanged.emit()
+
+    def _update_data_col_field(self):
+        """Update the hidden field with comma-separated list of data columns."""
+        columns = []
+        for i in range(self.data_col_list.count()):
+            columns.append(self.data_col_list.item(i).text())
+        self.data_col_hidden.setText(",".join(columns))
 
     def _validate_directory(self):
         """Validate the selected directory in a background thread."""
@@ -238,7 +302,9 @@ class ContextualDataPage(QWizardPage):
         else:
             self.validation_label.setText(f"✗ {message}")
             self.preview_table.set_dataframe(None)
-            self.data_col_combo.clear()
+            self.data_col_source_combo.clear()
+            self.data_col_list.clear()
+            self.data_col_hidden.clear()
             self.geoid_col_combo.clear()
             self.date_col_combo.clear()
             self.file_paths = []
@@ -259,8 +325,8 @@ class ContextualDataPage(QWizardPage):
         # Populate column dropdowns
         columns = preview_df.columns.tolist()
 
-        self.data_col_combo.clear()
-        self.data_col_combo.addItems(columns)
+        self.data_col_source_combo.clear()
+        self.data_col_source_combo.addItems(columns)
 
         self.geoid_col_combo.clear()
         self.geoid_col_combo.addItems(columns)
@@ -297,7 +363,8 @@ class ContextualDataPage(QWizardPage):
             return False
 
         # Must have columns selected
-        if not self.data_col_combo.currentText():
+        # Must have at least one data column
+        if self.data_col_list.count() == 0:
             return False
         if not self.geoid_col_combo.currentText():
             return False

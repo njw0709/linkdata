@@ -27,7 +27,7 @@ class DailyMeasureData:
     def __init__(
         self,
         file_path: Union[str, Path],
-        data_col: Optional[str] = None,
+        data_col: Union[str, List[str], None] = None,
         measure_type: Optional[str] = None,
         read_dtype: str = "float32",
         expected_format: str = "long",
@@ -132,16 +132,21 @@ class DailyMeasureData:
             if measure_type is None:
                 raise ValueError("Either `data_col` or `measure_type` must be provided")
             data_col = FILENAME_TO_VARNAME_DICT[measure_type]
+
+        # Normalize data_col to list
+        if isinstance(data_col, str):
+            data_col = [data_col]
         self.data_col = data_col
 
         # --- 1. Inspect header and apply rename if needed ---
         header = self._read_header()
         self.columns = header.columns.tolist()
 
-        # Check if target data_col is in columns after renaming
-        if self.data_col not in self.columns:
+        # Check if all target data_cols are in columns after renaming
+        missing_cols = [col for col in self.data_col if col not in self.columns]
+        if missing_cols:
             raise ValueError(
-                f"Column `{self.data_col}` not found in file: {self.filepath.name}\n"
+                f"Column(s) {missing_cols} not found in file: {self.filepath.name}\n"
                 f"Available columns: {self.columns}"
             )
 
@@ -151,14 +156,13 @@ class DailyMeasureData:
 
         # For non-CSV formats, use the flexible reader
         if file_format != "csv":
-            dtype_dict = (
-                {self.data_col: self.read_dtype}
-                if self.read_dtype != "float64"
-                else None
-            )
+            dtype_dict = None
+            if self.read_dtype != "float64":
+                # Create dtype dict for all data columns
+                dtype_dict = {col: self.read_dtype for col in self.data_col}
 
             if self.format == "long":
-                usecols = [self.date_col, self.geoid_col, self.data_col]
+                usecols = [self.date_col, self.geoid_col] + self.data_col
             else:
                 usecols = None  # need all columns to melt later
 
@@ -192,14 +196,13 @@ class DailyMeasureData:
 
         # For CSV files, use optimized reading logic
         else:
-            dtype_dict = (
-                {self.data_col: self.read_dtype}
-                if self.read_dtype != "float64"
-                else None
-            )
+            dtype_dict = None
+            if self.read_dtype != "float64":
+                # Create dtype dict for all data columns
+                dtype_dict = {col: self.read_dtype for col in self.data_col}
 
             if self.format == "long":
-                usecols = [self.date_col, self.geoid_col, self.data_col]
+                usecols = [self.date_col, self.geoid_col] + self.data_col
             else:
                 usecols = None  # need all columns to melt later
 
@@ -359,7 +362,7 @@ class DailyMeasureDataDir:
         self,
         dir_name: Union[str, Path],
         measure_type: Optional[str] = None,
-        data_col: Optional[str] = None,
+        data_col: Union[str, List[str], None] = None,
         geoid_col: str = "GEOID10",
         date_col: str = "Date",
         rename_col_dict: Optional[dict] = None,
@@ -482,6 +485,10 @@ class DailyMeasureDataDir:
             raise ValueError("Either `data_col` or `measure_type` must be provided")
         if data_col is None:
             data_col = FILENAME_TO_VARNAME_DICT[measure_type]
+
+        # Normalize data_col to list
+        if isinstance(data_col, str):
+            data_col = [data_col]
         self.data_col = data_col
         self.geoid_col = geoid_col
         self.date_col = date_col
@@ -579,13 +586,17 @@ class DailyMeasureDataDir:
             if rename_dict:
                 header = header.rename(columns=rename_dict)
 
-            if self.data_col not in header.columns:
-                missing.append((year, fpath.name, list(header.columns)))
+            # Check if all data_cols are present
+            missing_cols = [col for col in self.data_col if col not in header.columns]
+            if missing_cols:
+                missing.append((year, fpath.name, missing_cols, list(header.columns)))
 
         if missing:
-            msg_lines = ["The following files do not contain the expected column:"]
-            for year, fname, cols in missing:
-                msg_lines.append(f" - {year} ({fname}): available columns = {cols}")
+            msg_lines = ["The following files do not contain the expected column(s):"]
+            for year, fname, missing_cols, cols in missing:
+                msg_lines.append(
+                    f" - {year} ({fname}): missing {missing_cols}, available columns = {cols}"
+                )
             raise ValueError("\n".join(msg_lines))
 
     # ------------------------------------------------------------------
